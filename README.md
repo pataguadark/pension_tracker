@@ -134,15 +134,27 @@ en Fedora). Si no está disponible, la app abre igual en tu navegador por defect
 
 Pensión Tracker es también una **PWA instalable**. Todavía no hay apps nativas en
 las tiendas (ver [Roadmap](#roadmap)), pero puedes usarla desde el teléfono si el
-computador donde corre está en la misma red:
+computador donde corre está en la misma red. Lanza la app con `--lan` desde la
+terminal:
 
 ```bash
-pensiontracker --lan
+./PensionTracker-x86_64.AppImage --lan   # Linux
+PensionTracker.exe --lan                 # Windows
+PensionTracker.app/Contents/MacOS/PensionTracker --lan   # macOS
+pensiontracker --lan                     # desde el código fuente
 ```
 
-La app te muestra la dirección a abrir desde el celular (algo como
-`http://192.168.1.X:7040/registro`). Desde el navegador del teléfono elige
-**"Agregar a la pantalla de inicio"** y queda como una app más.
+La app imprime la dirección exacta a abrir desde el celular, con la IP real de tu
+equipo en la red:
+
+```
+AVISO: modo --lan activo. El servidor es accesible desde cualquier dispositivo
+de tu red local; úsalo solo en redes de confianza.
+[pensiontracker] Desde tu celular, abre: http://192.168.1.9:7040/registro
+```
+
+Desde el navegador del teléfono elige **"Agregar a la pantalla de inicio"** y queda
+como una app más.
 
 > El modo `--lan` expone el servidor a **toda tu red local**. Úsalo solo en redes de
 > confianza —tu casa—, nunca en un wifi público, y apágalo cuando no lo necesites.
@@ -246,7 +258,7 @@ Para recarga automática al guardar, `export PT_DEBUG=1` antes de arrancar (o co
 uv run pytest
 ```
 
-80 tests, aislados por completo de tu base de datos real: cada uno usa una BD SQLite
+91 tests, aislados por completo de tu base de datos real: cada uno usa una BD SQLite
 temporal (`tmp_path`).
 
 ### Construir los binarios

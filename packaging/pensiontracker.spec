@@ -83,7 +83,7 @@ if sys.platform == "darwin":
         bundle_identifier="cl.pensiontracker.app",
         info_plist={
             "CFBundleName": "Pensión Tracker",
-            "CFBundleShortVersionString": "1.0.0",
+            "CFBundleShortVersionString": "1.0.1",
             "NSHighResolutionCapable": True,
         },
     )

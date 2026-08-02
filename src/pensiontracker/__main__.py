@@ -10,40 +10,13 @@ Entrada CLI: python -m pensiontracker [--browser | --lan]
   --lan        expone el servidor en la red local (0.0.0.0) para acceder
                desde el móvil e instalar la PWA; por defecto siempre
                127.0.0.1
+
+La implementación vive en `desktop.py`, que es el entry point de los
+binarios empaquetados: una sola definición de la CLI para que el
+comportamiento sea idéntico desde el código fuente y desde el binario.
 """
 
-import argparse
-
-from pensiontracker import config, create_app
-
-
-def main() -> None:
-    parser = argparse.ArgumentParser(prog="pensiontracker")
-    parser.add_argument(
-        "--browser", action="store_true",
-        help="Ejecuta el servidor Flask sin ventana nativa.",
-    )
-    parser.add_argument(
-        "--lan", action="store_true",
-        help="Expone el servidor en la red local (0.0.0.0). Úsalo solo en redes de confianza.",
-    )
-    args = parser.parse_args()
-
-    if not args.browser and not args.lan:
-        from pensiontracker.desktop import main as desktop_main
-        desktop_main()
-        return
-
-    app = create_app()
-
-    host = "127.0.0.1"
-    if args.lan:
-        host = "0.0.0.0"
-        print("AVISO: modo --lan activo. El servidor es accesible desde cualquier "
-              "dispositivo de tu red local.")
-
-    app.run(host=host, port=config.PORT, debug=config.DEBUG)
-
+from pensiontracker.desktop import main
 
 if __name__ == "__main__":
     main()
