@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% block title %}Editar Pago #{{ pago.id }} — Pensión Tracker{% endblock %}
+
+{% block content %}
+<div class="page-registro">
+
+    <div class="page-header">
+        <h1 class="page-title">
+            Editar Pago
+            <span class="page-title-anio">#{{ pago.id }}</span>
+        </h1>
+        <p class="page-subtitle">
+            Modifica los datos del registro. El desbalance se recalcula automáticamente.
+        </p>
+    </div>
+
+    <form action="{{ url_for('pagos.editar_pago_post', pago_id=pago.id) }}" method="POST" class="form-card" id="formEditar">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <div class="form-grid">
+
+            <!-- Factor UTM (guardado o calculado inversamente) -->
+            <div class="form-group">
+                <label for="utm_factor" class="form-label">
+                    Factor UTM pactado
+                    <span class="form-hint">Guardado en el registro</span>
+                </label>
+                <div class="input-wrapper">
+                    <input type="text" inputmode="decimal" id="utm_factor" name="utm_factor" class="form-input"
+                        data-formato="factor"
+                        placeholder="ej: 3,0561" required
+                        value="{{ utm_factor_calc_fmt or '' }}">
+                    <span class="input-suffix">UTM</span>
+                </div>
+            </div>
+
+            <!-- Valor UTM -->
+            <div class="form-group">
+                <label for="utm_valor" class="form-label">
+                    Valor UTM
+                    <span class="form-hint">En pesos chilenos</span>
+                </label>
+                <div class="input-wrapper">
+                    <input type="text" inputmode="numeric" id="utm_valor" name="utm_valor" class="form-input"
+                        data-formato="miles"
+                        placeholder="ej: 69.889" required
+                        value="{{ "{:,.0f}".format(pago.utm_valor).replace(",", ".") if pago.utm_valor else '' }}">
+                    <span class="input-suffix">$</span>
+                </div>
+            </div>
+
+            <!-- Mes -->
+            <div class="form-group">
+                <label for="mes_pago" class="form-label">Mes del pago</label>
+                <select id="mes_pago" name="mes_pago" class="form-input form-select" required>
+                    {% set meses = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
+                    'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'] %}
+                    {% for i in range(1, 13) %}
+                    <option value="{{ i }}" {% if i==pago.mes_pago %}selected{% endif %}>
+                        {{ meses[i-1] }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Año -->
+            <div class="form-group">
+                <label for="anio_pago" class="form-label">Año del pago</label>
+                <input type="number" id="anio_pago" name="anio_pago" class="form-input" min="2000" max="2100"
+                    value="{{ pago.anio_pago }}" required>
+            </div>
+
+            <!-- Monto pagado -->
+            <div class="form-group form-group-full">
+                <label for="monto_pagado" class="form-label">
+                    Monto efectivamente pagado
+                    <span class="form-hint">Lo que se transfirió</span>
+                </label>
+                <div class="input-wrapper">
+                    <input type="text" inputmode="numeric" id="monto_pagado" name="monto_pagado"
+                        class="form-input input-destacado" data-formato="miles"
+                        placeholder="ej: 200.000" required
+                        value="{{ "{:,.0f}".format(pago.monto_pagado).replace(",", ".") if pago.monto_pagado else '' }}">
+                    <span class="input-suffix">$</span>
+                </div>
+            </div>
+
+            <!-- Fecha de registro -->
+            <div class="form-group form-group-full">
+                <label for="fecha" class="form-label">Fecha de registro</label>
+                <input type="date" id="fecha" name="fecha" class="form-input" value="{{ pago.fecha }}">
+            </div>
+
+        </div>
+
+        <!-- Preview en tiempo real -->
+        <div class="preview-card" id="previewCard">
+            <div class="preview-row">
+                <span class="preview-label">Cuota pactada</span>
+                <span class="preview-value" id="prevCuota">
+                    ${{ "{:,.0f}".format(pago.cuota_pactada).replace(",", ".") if pago.cuota_pactada else '—' }}
+                </span>
+            </div>
+            <div class="preview-row">
+                <span class="preview-label">Monto pagado</span>
+                <span class="preview-value" id="prevPagado">
+                    ${{ "{:,.0f}".format(pago.monto_pagado).replace(",", ".") if pago.monto_pagado else '—' }}
+                </span>
+            </div>
+            <div class="preview-divider"></div>
+            <div class="preview-row preview-resultado">
+                <span class="preview-label">Diferencia</span>
+                <span class="preview-value
+                    {% if pago.desbalance > 0 %}diff-pos
+                    {% elif pago.desbalance < 0 %}diff-neg
+                    {% else %}diff-zero{% endif %}" id="prevDiff">
+                    {% if pago.desbalance >= 0 %}+{% endif %}
+                    ${{ "{:,.0f}".format(pago.desbalance|abs).replace(",", ".") if pago.desbalance else '—' }}
+                </span>
+            </div>
+            <div class="preview-estado
+                {% if pago.desbalance > 0 %}estado-excedente
+                {% elif pago.desbalance < 0 %}estado-deuda
+                {% else %}estado-exacto{% endif %}" id="prevEstado">
+                {% if pago.desbalance > 0 %}EXCEDENTE — pagó de más
+                {% elif pago.desbalance < 0 %}DEUDA — pagó de menos {% else %}EXACTO — pago justo{% endif %} </div>
+            </div>
+
+            <!-- Botones -->
+            <div class="edit-actions">
+                <a href="{{ url_for('pagos.historial') }}" class="btn-cancelar">
+                    ← Cancelar
+                </a>
+                <button type="submit" class="btn-submit btn-submit-edit">
+                    Guardar cambios →
+                </button>
+            </div>
+
+    </form>
+</div>
+{% endblock %}

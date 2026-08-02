@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# AppRun — punto de entrada del AppImage.
+# Lanza el binario onedir de PyInstaller empaquetado dentro del AppDir.
+set -e
+HERE="$(dirname "$(readlink -f "${0}")")"
+exec "${HERE}/usr/bin/PensionTracker" "$@"

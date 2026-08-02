@@ -1,0 +1,99 @@
+name: Build
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: PensionTracker-windows
+          - os: macos-latest
+            artifact: PensionTracker-macos
+          - os: ubuntu-latest
+            artifact: PensionTracker-linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Instalar Python
+        run: uv python install 3.12
+
+      - name: Dependencias del sistema para el build (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev gir1.2-webkit2-4.1 python3-gi
+
+      - name: Instalar dependencias del proyecto
+        run: uv sync
+
+      - name: Tests
+        run: uv run pytest
+
+      - name: Build con PyInstaller
+        run: uv run pyinstaller packaging/pensiontracker.spec
+
+      - name: Descargar appimagetool (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          curl -L -o appimagetool https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool
+          sudo mv appimagetool /usr/local/bin/appimagetool
+
+      - name: Empaquetar AppImage (Linux)
+        if: runner.os == 'Linux'
+        run: packaging/appimage/build-appimage.sh
+
+      - name: Comprimir build (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          cd dist
+          7z a "../${{ matrix.artifact }}.zip" PensionTracker
+
+      - name: Comprimir build (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          cd dist
+          ditto -c -k --sequesterRsrc --keepParent "PensionTracker.app" "../${{ matrix.artifact }}.zip"
+
+      - name: Subir artefacto (Linux)
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist/PensionTracker-x86_64.AppImage
+
+      - name: Subir artefacto (Windows/macOS)
+        if: runner.os != 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}.zip
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Crear release con los 3 binarios
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*
+          generate_release_notes: true

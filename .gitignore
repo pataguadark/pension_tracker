@@ -1,0 +1,28 @@
+.env
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.env.local
+.venv/
+*.db-journal
+*.db-shm
+*.db-wal
+.DS_Store
+*.xlsx
+
+# Base de datos viva: nunca versionar
+pension_tracker.db
+*.db
+*.csv
+
+# Datos personales reales: nunca versionar
+private/
+datos-iniciales.txt
+
+# Notas de planificación internas: no forman parte del repo público
+.docs/

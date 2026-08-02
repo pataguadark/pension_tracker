@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Pensión Tracker
+Comment=Registro y seguimiento de pagos de pensión alimenticia (Chile, UTM)
+Exec=PensionTracker
+Icon=pensiontracker
+Categories=Office;Finance;
+Terminal=false

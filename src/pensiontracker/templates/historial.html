@@ -1,0 +1,232 @@
+{% extends "base.html" %}
+{% block title %}Historial — Pensión Tracker{% endblock %}
+
+{% block content %}
+<div class="page-historial" id="pageHistorial"
+    data-modo-desbalance="{{ 'utm' if resumen_utm and resumen_utm.desbalance_ajustado is not none else 'valor' }}">
+
+    <!-- Título -->
+    <div class="page-header page-header-row">
+        <div>
+            <h1 class="page-title">
+                Historial
+                {% if anio_filtro %}<span class="page-title-anio">{{ anio_filtro }}</span>{% endif %}
+            </h1>
+            <p class="page-subtitle">Registro completo de pagos y estado de cuenta.</p>
+        </div>
+
+        {% if anios_disponibles %}
+        <div class="year-filter">
+            <a href="{{ url_for('pagos.historial') }}" class="year-btn {% if not anio_filtro %}active{% endif %}">Todos</a>
+            {% for a in anios_disponibles %}
+            <a href="{{ url_for('pagos.historial_anio', anio=a) }}"
+                class="year-btn {% if anio_filtro == a %}active{% endif %}">{{ a }}</a>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Tarjetas resumen -->
+    {% if resumen and resumen.cantidad_pagos %}
+    <div class="resumen-grid">
+
+        <div class="resumen-card">
+            <span class="resumen-label">Pagos registrados</span>
+            <span class="resumen-valor">{{ resumen.cantidad_pagos }}</span>
+        </div>
+
+        <div class="resumen-card">
+            <span class="resumen-label">Total pagado</span>
+            <span class="resumen-valor">
+                ${{ "{:,.0f}".format(resumen.total_pagado or 0).replace(",", ".") }}
+            </span>
+        </div>
+
+        <div class="resumen-card">
+            <span class="resumen-label">Total pactado</span>
+            <span class="resumen-valor">
+                ${{ "{:,.0f}".format(resumen.total_pactado or 0).replace(",", ".") }}
+            </span>
+        </div>
+
+        {% set d = resumen.desbalance_acumulado or 0 %}
+        {% set d_utm = resumen_utm.desbalance_ajustado if resumen_utm else none %}
+        {% set clase_estado_valor = 'card-excedente' if d > 0 else 'card-deuda' if d < 0 else 'card-exacto' %}
+        {% set clase_estado_utm = ('card-excedente' if resumen_utm.estado == 'EXCEDENTE' else 'card-deuda' if resumen_utm.estado == 'DEUDA' else 'card-exacto') if d_utm is not none else '' %}
+        {% set clase_inicial = clase_estado_utm if d_utm is not none else clase_estado_valor %}
+        <div class="resumen-card resumen-card-estado {{ clase_inicial }}"
+            id="cardDesbalance" data-estado-valor="{{ clase_estado_valor }}" data-estado-utm="{{ clase_estado_utm }}">
+            <div class="resumen-card-header">
+                <span class="resumen-label">Desbalance acumulado</span>
+                {% if d_utm is not none %}
+                <button type="button" class="desbalance-toggle" id="btnToggleDesbalance"
+                    title="Alternar entre Valor y Valor UTM" aria-label="Cambiar tipo de cálculo del desbalance">⇄</button>
+                {% endif %}
+            </div>
+            <span class="resumen-valor valor-precio">
+                {% if d > 0 %}+{% elif d < 0 %}-{% endif %}${{ "{:,.0f}".format(d|abs).replace(",", ".") }}
+            </span>
+            <span class="resumen-estado valor-precio">
+                {% if d > 0 %}EXCEDENTE{% elif d < 0 %}DEUDA{% else %}EXACTO{% endif %} NOMINAL</span>
+            {% if d_utm is not none %}
+            <span class="resumen-valor valor-utm">
+                {% if d_utm > 0 %}+{% elif d_utm < 0 %}-{% endif %}${{ "{:,.0f}".format(d_utm|abs).replace(",", ".") }}
+            </span>
+            <span class="resumen-estado valor-utm">
+                {{ resumen_utm.estado }} AJUSTADO UTM</span>
+            {% endif %}
+            <span class="resumen-legend valor-precio">Suma de las diferencias mes a mes, cada una calculada con la UTM vigente en su propio mes.</span>
+            {% if d_utm is not none %}
+            <span class="resumen-legend valor-utm">Convierte cada diferencia a UTM y las suma; el total se expresa en pesos a la UTM vigente hoy — así calculan los Tribunales de Familia.</span>
+            {% else %}
+            <span class="resumen-legend resumen-legend-warn">No se pudo calcular el valor UTM: no hay una UTM de referencia disponible.</span>
+            {% endif %}
+        </div>
+
+    </div>
+    {% endif %}
+
+    <!-- Tabla de pagos -->
+    {% if pagos %}
+    <div class="tabla-wrapper">
+        <table class="tabla-pagos">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Período</th>
+                    <th>Fecha reg.</th>
+                    <th>Factor UTM</th>
+                    <th>UTM en $</th>
+                    <th>Cuota pactada</th>
+                    <th>Pagado</th>
+                    <th>Diferencia mes</th>
+                    <th>Saldo corrido</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% set meses = ['Ene','Feb','Mar','Abr','May','Jun',
+                'Jul','Ago','Sep','Oct','Nov','Dic'] %}
+
+                {# Contar cuántos registros hay por período #}
+                {% set ns = namespace(conteo={}) %}
+                {% for p in pagos %}
+                {% set clave = p.anio_pago ~ '-' ~ p.mes_pago %}
+                {% if clave in ns.conteo %}
+                {% set _ = ns.conteo.update({clave: ns.conteo[clave] + 1}) %}
+                {% else %}
+                {% set _ = ns.conteo.update({clave: 1}) %}
+                {% endif %}
+                {% endfor %}
+
+                {% set total_filas = pagos | length %}
+
+                {% for p in pagos %}
+                {% set num_orden = total_filas - loop.index0 %}
+                {% set clave = p.anio_pago ~ '-' ~ p.mes_pago %}
+                {% set tiene_multiples = ns.conteo[clave] > 1 %}
+                {% if p.utm_factor %}
+                {% set factor_display = p.utm_factor | round(4) %}
+                {% elif p.utm_valor and p.utm_valor > 0 %}
+                {% set factor_display = (p.cuota_pactada / p.utm_valor) | round(4) %}
+                {% else %}
+                {% set factor_display = None %}
+                {% endif %}
+
+                <tr class="fila-pago {% if tiene_multiples %}fila-multipago{% endif %}">
+                    <td class="td-id" data-label="N°">{{ num_orden }}</td>
+                    <td class="td-periodo" data-label="Período">
+                        {{ meses[p.mes_pago - 1] }} {{ p.anio_pago }}
+                        {% if tiene_multiples %}
+                        <span class="badge-multipago" title="Este mes tiene {{ ns.conteo[clave] }} pagos registrados">
+                            ×{{ ns.conteo[clave] }}
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td class="td-fecha" data-label="Fecha reg.">{{ p.fecha }}</td>
+                    <td class="td-mono td-factor" data-label="Factor UTM">
+                        {% if factor_display %}{{ factor_display }}{% else %}—{% endif %}
+                    </td>
+                    <td class="td-mono" data-label="UTM en $">
+                        ${{ "{:,.0f}".format(p.utm_valor).replace(",", ".") }}
+                    </td>
+                    <td class="td-mono" data-label="Cuota pactada">
+                        ${{ "{:,.0f}".format(p.cuota_pactada).replace(",", ".") }}
+                    </td>
+                    <td class="td-mono td-pagado" data-label="Pagado">
+                        ${{ "{:,.0f}".format(p.monto_pagado).replace(",", ".") }}
+                    </td>
+                    <td class="td-mono" data-label="Diferencia mes">
+                        <span class="valor-precio
+                            {% if p.desbalance > 0 %}td-pos
+                            {% elif p.desbalance < 0 %}td-neg
+                            {% else %}td-zero{% endif %}">
+                            {% if p.desbalance > 0 %}+{% elif p.desbalance < 0 %}-{% endif %}${{
+                            "{:,.0f}".format(p.desbalance|abs).replace(",", ".") }}
+                        </span>
+                        {% if p.desbalance_utm_mes_pesos is not none %}
+                        <span class="valor-utm
+                            {% if p.desbalance_utm_mes_pesos > 0 %}td-pos
+                            {% elif p.desbalance_utm_mes_pesos < 0 %}td-neg
+                            {% else %}td-zero{% endif %}">
+                            {% if p.desbalance_utm_mes_pesos > 0 %}+{% elif p.desbalance_utm_mes_pesos < 0 %}-{% endif %}${{
+                            "{:,.0f}".format(p.desbalance_utm_mes_pesos|abs).replace(",", ".") }}
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td class="td-mono td-corrido" data-label="Saldo corrido">
+                        <span class="valor-precio
+                            {% if p.desbalance_corrido > 0 %}td-pos
+                            {% elif p.desbalance_corrido < 0 %}td-neg
+                            {% else %}td-zero{% endif %}">
+                            {% if p.desbalance_corrido > 0 %}+{% elif p.desbalance_corrido < 0 %}-{% endif %}${{
+                            "{:,.0f}".format(p.desbalance_corrido|abs).replace(",", ".") }}
+                        </span>
+                        {% if p.desbalance_utm_corrido_pesos is not none %}
+                        <span class="valor-utm
+                            {% if p.desbalance_utm_corrido_pesos > 0 %}td-pos
+                            {% elif p.desbalance_utm_corrido_pesos < 0 %}td-neg
+                            {% else %}td-zero{% endif %}">
+                            {% if p.desbalance_utm_corrido_pesos > 0 %}+{% elif p.desbalance_utm_corrido_pesos < 0 %}-{% endif %}${{
+                            "{:,.0f}".format(p.desbalance_utm_corrido_pesos|abs).replace(",", ".") }}
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td class="td-acciones">
+                        <a href="{{ url_for('pagos.editar_pago', pago_id=p.id) }}" class="btn-editar"
+                            title="Editar pago" aria-label="Editar pago #{{ p.id }}">✎</a>
+                        <form action="{{ url_for('pagos.eliminar_pago', pago_id=p.id) }}" method="POST" class="form-inline"
+                            data-confirm="¿Eliminar pago #{{ p.id }}? Esta acción no se puede deshacer.">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn-eliminar" title="Eliminar pago" aria-label="Eliminar pago #{{ p.id }}">✕</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="historial-actions">
+        <a href="{{ url_for('export.exportar_csv') }}" class="btn-exportar">Exportar CSV</a>
+        <form action="{{ url_for('export.respaldar_datos') }}" method="POST" class="form-inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn-exportar">↓ Respaldar datos</button>
+        </form>
+        <a href="{{ url_for('pagos.registro') }}" class="btn-nuevo">+ Nuevo pago</a>
+    </div>
+
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-icon">📋</div>
+        <p class="empty-title">Sin pagos registrados</p>
+        <p class="empty-sub">
+            {% if anio_filtro %}No hay pagos para el año {{ anio_filtro }}.
+            {% else %}Aún no has registrado ningún pago.{% endif %}
+        </p>
+        <a href="{{ url_for('pagos.registro') }}" class="btn-nuevo">+ Registrar primer pago</a>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}

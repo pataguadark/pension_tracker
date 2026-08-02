@@ -1,0 +1,4 @@
+# GitHub no soporta MercadoPago de forma nativa, por eso ambos van como `custom`.
+custom:
+  - "https://link.mercadopago.cl/pension_tracker"
+  - "https://www.paypal.com/donate/?hosted_button_id=2PFWY58A55FQE"
