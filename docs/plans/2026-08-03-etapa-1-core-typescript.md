@@ -1117,91 +1117,193 @@ Si se redondea antes de multiplicar, el resultado deja de coincidir centavo a
 centavo con la última fila del historial corrido de la Task 6. Replicar ese
 orden exacto.
 
-- [ ] **Step 1: Crear la fixture y verificar sus valores contra Python**
+- [ ] **Step 1: Crear la fixture**
 
-Construye `shared/fixtures/desbalance-utm.json` con esta forma, y **genera los
-valores esperados ejecutando la implementación Python**, que es la referencia:
+Los valores esperados de abajo **ya fueron generados ejecutando la
+implementación Python**, que es la referencia. Úsalos textualmente. Si al correr
+los tests alguno no coincide, repórtalo en vez de ajustarlo: significaría que
+alguien cambió el comportamiento del Python.
+
+Ojo con las claves: el JSON usa `camelCase` y el Python usa `snake_case`. La
+suite de pytest traduce con la función `a_snake` del Step 2.
+
+`shared/fixtures/desbalance-utm.json`:
 
 ```json
 {
-  "descripcion": "Diferencias convertidas a unidades UTM a la tasa de cada mes, sumadas en UTM y expresadas en pesos a la UTM vigente.",
+  "descripcion": "Diferencias convertidas a unidades UTM a la tasa de cada mes, sumadas en UTM y expresadas en pesos a la UTM vigente. Así calculan la deuda los Tribunales de Familia.",
   "mensual": [
     {
       "nombre": "pago exacto no genera diferencia",
-      "entrada": { "pago": { "utmFactor": 3, "utmValor": 70000, "cuotaPactada": 210000, "montoPagado": 210000 } },
-      "esperado": 0
+      "entrada": { "utmFactor": 3.0, "utmValor": 70000, "cuotaPactada": 210000.0, "montoPagado": 210000 },
+      "esperado": 0.0
+    },
+    {
+      "nombre": "exceso en un mes",
+      "entrada": { "utmFactor": 3.0, "utmValor": 70000, "cuotaPactada": 210000.0, "montoPagado": 215000 },
+      "esperado": 0.07142857142857162
+    },
+    {
+      "nombre": "deficit en un mes",
+      "entrada": { "utmFactor": 3.0, "utmValor": 67294, "cuotaPactada": 201882.0, "montoPagado": 200000 },
+      "esperado": -0.027966832109846518
     },
     {
       "nombre": "sin utmFactor se deriva de cuota y utm",
-      "entrada": { "pago": { "utmFactor": null, "utmValor": 70000, "cuotaPactada": 210000, "montoPagado": 215000 } },
-      "esperado": 0.07142857142857142
+      "entrada": { "utmFactor": null, "utmValor": 70000, "cuotaPactada": 210000.0, "montoPagado": 215000 },
+      "esperado": 0.07142857142857162
     },
     {
       "nombre": "sin utmValor no se puede calcular",
-      "entrada": { "pago": { "utmFactor": 3, "utmValor": 0, "cuotaPactada": 210000, "montoPagado": 215000 } },
+      "entrada": { "utmFactor": 3.0, "utmValor": 0, "cuotaPactada": 210000.0, "montoPagado": 215000 },
       "esperado": null
     }
   ],
-  "acumulado": []
+  "acumulado": [
+    {
+      "nombre": "sin pagos",
+      "entrada": { "utmValorActual": 70000, "pagos": [] },
+      "esperado": { "desbalanceAcumuladoUtm": 0.0, "desbalanceAjustado": 0.0, "estado": "EXACTO" }
+    },
+    {
+      "nombre": "un solo pago deficiente",
+      "entrada": {
+        "utmValorActual": 70000,
+        "pagos": [
+          { "mesPago": 1, "anioPago": 2025, "utmFactor": 3.0, "utmValor": 67294, "cuotaPactada": 201882.0, "montoPagado": 200000, "desbalance": -1882.0 }
+        ]
+      },
+      "esperado": { "desbalanceAcumuladoUtm": -0.028, "desbalanceAjustado": -1957.68, "estado": "DEUDA" }
+    },
+    {
+      "nombre": "tres pagos con UTM distinta mezclando exceso y deficit",
+      "entrada": {
+        "utmValorActual": 70000,
+        "pagos": [
+          { "mesPago": 1, "anioPago": 2025, "utmFactor": 3.0, "utmValor": 67294, "cuotaPactada": 201882.0, "montoPagado": 200000, "desbalance": -1882.0 },
+          { "mesPago": 2, "anioPago": 2025, "utmFactor": 3.0, "utmValor": 67429, "cuotaPactada": 202287.0, "montoPagado": 202287, "desbalance": 0.0 },
+          { "mesPago": 3, "anioPago": 2025, "utmFactor": 3.0, "utmValor": 68034, "cuotaPactada": 204102.0, "montoPagado": 210000, "desbalance": 5898.0 }
+        ]
+      },
+      "esperado": { "desbalanceAcumuladoUtm": 0.0587, "desbalanceAjustado": 4110.76, "estado": "EXCEDENTE" }
+    },
+    {
+      "nombre": "sin UTM de referencia el ajuste en pesos queda nulo",
+      "entrada": {
+        "utmValorActual": null,
+        "pagos": [
+          { "mesPago": 1, "anioPago": 2025, "utmFactor": 3.0, "utmValor": 67294, "cuotaPactada": 201882.0, "montoPagado": 200000, "desbalance": -1882.0 },
+          { "mesPago": 2, "anioPago": 2025, "utmFactor": 3.0, "utmValor": 67429, "cuotaPactada": 202287.0, "montoPagado": 202287, "desbalance": 0.0 },
+          { "mesPago": 3, "anioPago": 2025, "utmFactor": 3.0, "utmValor": 68034, "cuotaPactada": 204102.0, "montoPagado": 210000, "desbalance": 5898.0 }
+        ]
+      },
+      "esperado": { "desbalanceAcumuladoUtm": 0.0587, "desbalanceAjustado": null, "estado": "EXCEDENTE" }
+    }
+  ]
 }
 ```
 
-Para el bloque `acumulado`, arma al menos cuatro casos: lista vacía; un solo
-pago; varios pagos con UTM distinta por mes mezclando exceso y déficit; y el
-mismo conjunto con `utmValorActual: null` (donde `desbalanceAjustado` debe
-quedar en `null`).
-
-Genera cada valor esperado así, y pega la salida literal en el JSON:
-
-```bash
-uv run python -c "
-from pensiontracker.services.calculation_service import (
-    calcular_desbalance_utm_mensual, calcular_desbalance_acumulado_utm)
-pagos = [
-    {'utm_factor': 3.0, 'utm_valor': 67294, 'cuota_pactada': 201882.0, 'monto_pagado': 200000},
-    {'utm_factor': 3.0, 'utm_valor': 68034, 'cuota_pactada': 204102.0, 'monto_pagado': 210000},
-    {'utm_factor': 3.0, 'utm_valor': 69889, 'cuota_pactada': 209667.0, 'monto_pagado': 209667},
-]
-for p in pagos:
-    print('mensual:', calcular_desbalance_utm_mensual(p))
-print('acumulado 70000:', calcular_desbalance_acumulado_utm(70000, pagos))
-print('acumulado None:', calcular_desbalance_acumulado_utm(None, pagos))
-print('acumulado vacio:', calcular_desbalance_acumulado_utm(70000, []))
-"
-```
-
-**No inventes los números esperados.** Cópialos de esta salida. Si un valor te
-parece raro, dilo en el reporte en vez de ajustarlo a mano.
-
-Ojo con las claves: el JSON usa `camelCase` (`utmFactor`) y el Python usa
-`snake_case` (`utm_factor`). La suite de pytest debe traducir las claves al
-construir el dict que le pasa a la implementación Python.
-
 - [ ] **Step 2: Escribir los tests y verlos fallar**
 
-En `mobile/src/core/fixtures.test.ts`, agregar bloques `describe` para `mensual`
-y `acumulado`, siguiendo el patrón de la Task 4: recorrer los casos, distinguir
-`null` de número, y comparar `desbalanceAcumuladoUtm`, `desbalanceAjustado` y
-`estado` por separado. Para `desbalanceAjustado` usar `toBeCloseTo(esperado, 2)`
-cuando no sea `null`, y `toBeNull()` cuando lo sea.
-
-En `tests/test_fixtures_doradas.py`, agregar los tests equivalentes, con una
-función auxiliar que convierta las claves `camelCase` del JSON a las
-`snake_case` que espera el Python:
+Agregar a `tests/test_fixtures_doradas.py`:
 
 ```python
+from pensiontracker.services.calculation_service import (
+    calcular_desbalance_acumulado_utm,
+    calcular_desbalance_utm_mensual,
+)
+
+MAPA_CLAVES = {
+    "utmFactor": "utm_factor",
+    "utmValor": "utm_valor",
+    "cuotaPactada": "cuota_pactada",
+    "montoPagado": "monto_pagado",
+    "mesPago": "mes_pago",
+    "anioPago": "anio_pago",
+}
+
+
 def a_snake(pago: dict) -> dict:
     """Traduce las claves camelCase de las fixtures a las snake_case del Python."""
-    mapa = {
-        "utmFactor": "utm_factor",
-        "utmValor": "utm_valor",
-        "cuotaPactada": "cuota_pactada",
-        "montoPagado": "monto_pagado",
-        "mesPago": "mes_pago",
-        "anioPago": "anio_pago",
-    }
-    return {mapa.get(k, k): v for k, v in pago.items()}
+    return {MAPA_CLAVES.get(k, k): v for k, v in pago.items()}
+
+
+@pytest.mark.parametrize("nombre,entrada,esperado", casos("desbalance-utm.json", "mensual"))
+def test_desbalance_utm_mensual_contra_fixtures(nombre, entrada, esperado):
+    obtenido = calcular_desbalance_utm_mensual(a_snake(entrada))
+    if esperado is None:
+        assert obtenido is None
+    else:
+        assert obtenido == pytest.approx(esperado)
+
+
+@pytest.mark.parametrize("nombre,entrada,esperado", casos("desbalance-utm.json", "acumulado"))
+def test_desbalance_acumulado_utm_contra_fixtures(nombre, entrada, esperado):
+    pagos = [a_snake(p) for p in entrada["pagos"]]
+    obtenido = calcular_desbalance_acumulado_utm(entrada["utmValorActual"], pagos)
+
+    assert obtenido["desbalance_acumulado_utm"] == pytest.approx(
+        esperado["desbalanceAcumuladoUtm"])
+    assert obtenido["estado"] == esperado["estado"]
+
+    if esperado["desbalanceAjustado"] is None:
+        assert obtenido["desbalance_ajustado"] is None
+    else:
+        assert obtenido["desbalance_ajustado"] == pytest.approx(
+            esperado["desbalanceAjustado"])
 ```
+
+Agregar a `mobile/src/core/fixtures.test.ts`:
+
+```typescript
+import {
+  calcularDesbalanceAcumuladoUtm,
+  calcularDesbalanceUtmMensual,
+} from './calculos';
+import type { Pago } from './tipos';
+
+const desbalanceUtm = cargar('desbalance-utm.json');
+
+describe('calcularDesbalanceUtmMensual contra fixtures', () => {
+  it.each(desbalanceUtm.mensual!)('$nombre', ({ entrada, esperado }) => {
+    const obtenido = calcularDesbalanceUtmMensual(entrada as unknown as Pago);
+    if (esperado === null) {
+      expect(obtenido).toBeNull();
+    } else {
+      expect(obtenido).toBeCloseTo(esperado as number, 10);
+    }
+  });
+});
+
+describe('calcularDesbalanceAcumuladoUtm contra fixtures', () => {
+  it.each(desbalanceUtm.acumulado!)('$nombre', ({ entrada, esperado }) => {
+    const { utmValorActual, pagos } = entrada as {
+      utmValorActual: number | null;
+      pagos: Pago[];
+    };
+    const obtenido = calcularDesbalanceAcumuladoUtm(utmValorActual, pagos);
+    const esp = esperado as {
+      desbalanceAcumuladoUtm: number;
+      desbalanceAjustado: number | null;
+      estado: string;
+    };
+
+    expect(obtenido.desbalanceAcumuladoUtm).toBeCloseTo(esp.desbalanceAcumuladoUtm, 4);
+    expect(obtenido.estado).toBe(esp.estado);
+
+    if (esp.desbalanceAjustado === null) {
+      expect(obtenido.desbalanceAjustado).toBeNull();
+    } else {
+      expect(obtenido.desbalanceAjustado).toBeCloseTo(esp.desbalanceAjustado, 2);
+    }
+  });
+});
+```
+
+Nota: las fixtures del bloque `mensual` no traen las claves `mesPago`,
+`anioPago` ni `desbalance`, porque `calcularDesbalanceUtmMensual` no las usa. El
+`as unknown as Pago` es deliberado: obliga a que el test refleje exactamente lo
+que la función necesita, sin inventar campos.
 
 Ejecutar: `npm test --prefix mobile`
 Esperado: FAIL, las funciones no existen en TypeScript.
@@ -1326,47 +1428,238 @@ Aplicar el cambio de firma descrito arriba.
 Ejecutar: `uv run pytest -q`
 Esperado: verde, sin tocar ningún llamador.
 
-- [ ] **Step 2: Generar la fixture desde Python**
+- [ ] **Step 2: Crear la fixture**
 
-Arma `shared/fixtures/historial-corrido.json` con al menos cuatro casos: lista
-vacía; un pago; tres pagos de meses distintos con UTM distinta mezclando exceso y
-déficit, desordenados a propósito para verificar que se ordenan por año y mes; y
-el mismo conjunto con `utmValorActual: null`.
+Los valores de abajo **ya fueron generados con la implementación Python**. Úsalos
+textualmente.
 
-Genera los valores esperados ejecutando el Python ya parametrizado, y pega la
-salida literal:
+Fíjate en dos cosas que la fixture fija a propósito: los pagos de entrada vienen
+**desordenados** (mes 3, 1, 2) y las filas esperadas salen **del más reciente al
+más antiguo** (mes 3, 2, 1). El saldo corrido acumula desde el más antiguo. El
+TypeScript debe reproducir las dos cosas.
 
-```bash
-uv run python -c "
-import json
-from pensiontracker.services.calculation_service import (
-    obtener_historial_desbalances, obtener_estado_cuenta)
-pagos = [
-    {'mes_pago': 3, 'anio_pago': 2025, 'utm_factor': 3.0, 'utm_valor': 68034, 'cuota_pactada': 204102.0, 'monto_pagado': 210000, 'desbalance': 5898.0},
-    {'mes_pago': 1, 'anio_pago': 2025, 'utm_factor': 3.0, 'utm_valor': 67294, 'cuota_pactada': 201882.0, 'monto_pagado': 200000, 'desbalance': -1882.0},
-    {'mes_pago': 2, 'anio_pago': 2025, 'utm_factor': 3.0, 'utm_valor': 67429, 'cuota_pactada': 202287.0, 'monto_pagado': 202287, 'desbalance': 0.0},
-]
-h = obtener_historial_desbalances(70000, pagos)
-print(json.dumps([{k: r[k] for k in ('mes_pago','desbalance_corrido','estado_corrido','desbalance_utm_mes_pesos','desbalance_utm_corrido_pesos')} for r in h], indent=2, ensure_ascii=False))
-"
+`shared/fixtures/historial-corrido.json`:
+
+```json
+{
+  "descripcion": "Historial enriquecido con el saldo acumulado corrido mes a mes, en pesos históricos y en UTM convertida a pesos de hoy. La entrada viene desordenada a propósito; la salida va del más reciente al más antiguo.",
+  "historial": [
+    {
+      "nombre": "sin pagos",
+      "entrada": { "utmValorActual": 70000, "pagos": [] },
+      "esperado": []
+    },
+    {
+      "nombre": "un solo pago deficiente",
+      "entrada": {
+        "utmValorActual": 70000,
+        "pagos": [
+          { "mesPago": 1, "anioPago": 2025, "utmFactor": 3.0, "utmValor": 67294, "cuotaPactada": 201882.0, "montoPagado": 200000, "desbalance": -1882.0 }
+        ]
+      },
+      "esperado": [
+        { "mesPago": 1, "desbalanceCorrido": -1882.0, "estadoCorrido": "DEUDA", "desbalanceUtmMesPesos": -1957.68, "desbalanceUtmCorridoPesos": -1957.68, "estadoUtmMes": "DEUDA", "estadoUtmCorrido": "DEUDA" }
+      ]
+    },
+    {
+      "nombre": "tres pagos desordenados se ordenan y acumulan",
+      "entrada": {
+        "utmValorActual": 70000,
+        "pagos": [
+          { "mesPago": 3, "anioPago": 2025, "utmFactor": 3.0, "utmValor": 68034, "cuotaPactada": 204102.0, "montoPagado": 210000, "desbalance": 5898.0 },
+          { "mesPago": 1, "anioPago": 2025, "utmFactor": 3.0, "utmValor": 67294, "cuotaPactada": 201882.0, "montoPagado": 200000, "desbalance": -1882.0 },
+          { "mesPago": 2, "anioPago": 2025, "utmFactor": 3.0, "utmValor": 67429, "cuotaPactada": 202287.0, "montoPagado": 202287, "desbalance": 0.0 }
+        ]
+      },
+      "esperado": [
+        { "mesPago": 3, "desbalanceCorrido": 4016.0, "estadoCorrido": "EXCEDENTE", "desbalanceUtmMesPesos": 6068.44, "desbalanceUtmCorridoPesos": 4110.76, "estadoUtmMes": "EXCEDENTE", "estadoUtmCorrido": "EXCEDENTE" },
+        { "mesPago": 2, "desbalanceCorrido": -1882.0, "estadoCorrido": "DEUDA", "desbalanceUtmMesPesos": 0.0, "desbalanceUtmCorridoPesos": -1957.68, "estadoUtmMes": "EXACTO", "estadoUtmCorrido": "DEUDA" },
+        { "mesPago": 1, "desbalanceCorrido": -1882.0, "estadoCorrido": "DEUDA", "desbalanceUtmMesPesos": -1957.68, "desbalanceUtmCorridoPesos": -1957.68, "estadoUtmMes": "DEUDA", "estadoUtmCorrido": "DEUDA" }
+      ]
+    },
+    {
+      "nombre": "sin UTM de referencia los campos en pesos quedan nulos",
+      "entrada": {
+        "utmValorActual": null,
+        "pagos": [
+          { "mesPago": 3, "anioPago": 2025, "utmFactor": 3.0, "utmValor": 68034, "cuotaPactada": 204102.0, "montoPagado": 210000, "desbalance": 5898.0 },
+          { "mesPago": 1, "anioPago": 2025, "utmFactor": 3.0, "utmValor": 67294, "cuotaPactada": 201882.0, "montoPagado": 200000, "desbalance": -1882.0 },
+          { "mesPago": 2, "anioPago": 2025, "utmFactor": 3.0, "utmValor": 67429, "cuotaPactada": 202287.0, "montoPagado": 202287, "desbalance": 0.0 }
+        ]
+      },
+      "esperado": [
+        { "mesPago": 3, "desbalanceCorrido": 4016.0, "estadoCorrido": "EXCEDENTE", "desbalanceUtmMesPesos": null, "desbalanceUtmCorridoPesos": null, "estadoUtmMes": null, "estadoUtmCorrido": null },
+        { "mesPago": 2, "desbalanceCorrido": -1882.0, "estadoCorrido": "DEUDA", "desbalanceUtmMesPesos": null, "desbalanceUtmCorridoPesos": null, "estadoUtmMes": null, "estadoUtmCorrido": null },
+        { "mesPago": 1, "desbalanceCorrido": -1882.0, "estadoCorrido": "DEUDA", "desbalanceUtmMesPesos": null, "desbalanceUtmCorridoPesos": null, "estadoUtmMes": null, "estadoUtmCorrido": null }
+      ]
+    }
+  ],
+  "resumen": [
+    {
+      "nombre": "sin pagos",
+      "entrada": { "pagos": [] },
+      "esperado": { "cantidadPagos": 0, "totalPagado": 0, "totalPactado": 0, "desbalanceAcumulado": 0, "estado": "EXACTO" }
+    },
+    {
+      "nombre": "tres pagos con excedente neto",
+      "entrada": {
+        "pagos": [
+          { "mesPago": 3, "anioPago": 2025, "utmFactor": 3.0, "utmValor": 68034, "cuotaPactada": 204102.0, "montoPagado": 210000, "desbalance": 5898.0 },
+          { "mesPago": 1, "anioPago": 2025, "utmFactor": 3.0, "utmValor": 67294, "cuotaPactada": 201882.0, "montoPagado": 200000, "desbalance": -1882.0 },
+          { "mesPago": 2, "anioPago": 2025, "utmFactor": 3.0, "utmValor": 67429, "cuotaPactada": 202287.0, "montoPagado": 202287, "desbalance": 0.0 }
+        ]
+      },
+      "esperado": { "cantidadPagos": 3, "totalPagado": 612287, "totalPactado": 608271.0, "desbalanceAcumulado": 4016.0, "estado": "EXCEDENTE" }
+    }
+  ]
+}
 ```
-
-Para el resumen de estado de cuenta, los valores esperados son sumas directas:
-`totalPagado`, `totalPactado` y `desbalanceAcumulado` redondeados a 2 decimales.
-
-**Verifica en la salida** que el historial vuelve del más reciente al más
-antiguo (el Python hace `reversed` al final) y que el saldo corrido acumula desde
-el más antiguo. El TypeScript debe reproducir ambas cosas.
 
 - [ ] **Step 3: Escribir los tests y verlos fallar**
 
-Agregar los bloques correspondientes a ambas suites, siguiendo el patrón de las
-Tasks 4 y 5. Comparar, para cada fila: `mesPago`, `desbalanceCorrido`,
-`estadoCorrido`, `desbalanceUtmMesPesos` y `desbalanceUtmCorridoPesos`. Verificar
-además el **orden** de las filas, no solo su contenido.
+Agregar a `tests/test_fixtures_doradas.py`:
+
+```python
+from pensiontracker.services.calculation_service import obtener_historial_desbalances
+
+CLAVES_FILA = (
+    "desbalance_corrido",
+    "estado_corrido",
+    "desbalance_utm_mes_pesos",
+    "desbalance_utm_corrido_pesos",
+    "estado_utm_mes",
+    "estado_utm_corrido",
+)
+
+
+@pytest.mark.parametrize("nombre,entrada,esperado", casos("historial-corrido.json", "historial"))
+def test_historial_corrido_contra_fixtures(nombre, entrada, esperado):
+    pagos = [a_snake(p) for p in entrada["pagos"]]
+    obtenido = obtener_historial_desbalances(entrada["utmValorActual"], pagos)
+
+    assert len(obtenido) == len(esperado)
+
+    for fila, esp in zip(obtenido, esperado):
+        # El orden importa: la fixture espera del más reciente al más antiguo.
+        assert fila["mes_pago"] == esp["mesPago"]
+        for clave_py in CLAVES_FILA:
+            clave_json = "".join(
+                parte if i == 0 else parte.capitalize()
+                for i, parte in enumerate(clave_py.split("_"))
+            )
+            valor, valor_esp = fila[clave_py], esp[clave_json]
+            if valor_esp is None:
+                assert valor is None, f"{nombre}: {clave_py} debería ser None"
+            elif isinstance(valor_esp, str):
+                assert valor == valor_esp, f"{nombre}: {clave_py}"
+            else:
+                assert valor == pytest.approx(valor_esp), f"{nombre}: {clave_py}"
+
+
+@pytest.mark.parametrize("nombre,entrada,esperado", casos("historial-corrido.json", "resumen"))
+def test_resumen_estado_cuenta_contra_fixtures(nombre, entrada, esperado):
+    """El resumen del Python vive en obtener_estado_cuenta(), que consulta la BD.
+    Se replica acá la aritmética que esa función aplica sobre la lista de pagos."""
+    pagos = [a_snake(p) for p in entrada["pagos"]]
+
+    if not pagos:
+        obtenido = {
+            "cantidadPagos": 0, "totalPagado": 0.0, "totalPactado": 0.0,
+            "desbalanceAcumulado": 0.0, "estado": "EXACTO",
+        }
+    else:
+        desbalance = round(sum(p["desbalance"] for p in pagos), 2)
+        obtenido = {
+            "cantidadPagos": len(pagos),
+            "totalPagado": round(sum(p["monto_pagado"] for p in pagos), 2),
+            "totalPactado": round(sum(p["cuota_pactada"] for p in pagos), 2),
+            "desbalanceAcumulado": desbalance,
+            "estado": ("EXCEDENTE" if desbalance > 0
+                       else "DEUDA" if desbalance < 0 else "EXACTO"),
+        }
+
+    assert obtenido["cantidadPagos"] == esperado["cantidadPagos"]
+    assert obtenido["totalPagado"] == pytest.approx(esperado["totalPagado"])
+    assert obtenido["totalPactado"] == pytest.approx(esperado["totalPactado"])
+    assert obtenido["desbalanceAcumulado"] == pytest.approx(esperado["desbalanceAcumulado"])
+    assert obtenido["estado"] == esperado["estado"]
+```
+
+Agregar a `mobile/src/core/fixtures.test.ts`:
+
+```typescript
+import { obtenerHistorialDesbalances, resumirEstadoCuenta } from './calculos';
+
+const historialCorrido = cargar('historial-corrido.json');
+
+interface FilaEsperada {
+  mesPago: number;
+  desbalanceCorrido: number;
+  estadoCorrido: string;
+  desbalanceUtmMesPesos: number | null;
+  desbalanceUtmCorridoPesos: number | null;
+  estadoUtmMes: string | null;
+  estadoUtmCorrido: string | null;
+}
+
+describe('obtenerHistorialDesbalances contra fixtures', () => {
+  it.each(historialCorrido.historial!)('$nombre', ({ entrada, esperado }) => {
+    const { utmValorActual, pagos } = entrada as {
+      utmValorActual: number | null;
+      pagos: Pago[];
+    };
+    const obtenido = obtenerHistorialDesbalances(pagos, utmValorActual);
+    const filas = esperado as unknown as FilaEsperada[];
+
+    expect(obtenido).toHaveLength(filas.length);
+
+    filas.forEach((esp, i) => {
+      const fila = obtenido[i]!;
+      // El orden importa: se espera del más reciente al más antiguo.
+      expect(fila.mesPago).toBe(esp.mesPago);
+      expect(fila.desbalanceCorrido).toBeCloseTo(esp.desbalanceCorrido, 2);
+      expect(fila.estadoCorrido).toBe(esp.estadoCorrido);
+      expect(fila.estadoUtmMes).toBe(esp.estadoUtmMes);
+      expect(fila.estadoUtmCorrido).toBe(esp.estadoUtmCorrido);
+
+      if (esp.desbalanceUtmMesPesos === null) {
+        expect(fila.desbalanceUtmMesPesos).toBeNull();
+        expect(fila.desbalanceUtmCorridoPesos).toBeNull();
+      } else {
+        expect(fila.desbalanceUtmMesPesos).toBeCloseTo(esp.desbalanceUtmMesPesos, 2);
+        expect(fila.desbalanceUtmCorridoPesos).toBeCloseTo(
+          esp.desbalanceUtmCorridoPesos as number, 2);
+      }
+    });
+  });
+});
+
+describe('resumirEstadoCuenta contra fixtures', () => {
+  it.each(historialCorrido.resumen!)('$nombre', ({ entrada, esperado }) => {
+    const { pagos } = entrada as { pagos: Pago[] };
+    const obtenido = resumirEstadoCuenta(pagos);
+    const esp = esperado as {
+      cantidadPagos: number;
+      totalPagado: number;
+      totalPactado: number;
+      desbalanceAcumulado: number;
+      estado: string;
+    };
+
+    expect(obtenido.cantidadPagos).toBe(esp.cantidadPagos);
+    expect(obtenido.totalPagado).toBeCloseTo(esp.totalPagado, 2);
+    expect(obtenido.totalPactado).toBeCloseTo(esp.totalPactado, 2);
+    expect(obtenido.desbalanceAcumulado).toBeCloseTo(esp.desbalanceAcumulado, 2);
+    expect(obtenido.estado).toBe(esp.estado);
+  });
+});
+```
 
 Ejecutar: `npm test --prefix mobile`
-Esperado: FAIL, las funciones no existen.
+Esperado: FAIL, `obtenerHistorialDesbalances` y `resumirEstadoCuenta` no existen.
+
+Ejecutar: `uv run pytest tests/test_fixtures_doradas.py -v`
+Esperado: PASS, la implementación Python ya existe y de ahí salieron los valores.
 
 - [ ] **Step 4: Implementar**
 
