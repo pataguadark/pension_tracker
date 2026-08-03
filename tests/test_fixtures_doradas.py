@@ -191,7 +191,16 @@ def a_snake(pago: dict) -> dict:
 
 @pytest.mark.parametrize("nombre,entrada,esperado", casos("desbalance-utm.json", "mensual"))
 def test_desbalance_utm_mensual_contra_fixtures(nombre, entrada, esperado):
-    obtenido = calcular_desbalance_utm_mensual(a_snake(entrada))
+    pago = a_snake(entrada)
+    pago["utm_factor"] = _convertir_no_finito(pago.get("utm_factor"))
+    pago["utm_valor"] = _convertir_no_finito(pago.get("utm_valor"))
+
+    if espera_error(esperado):
+        with pytest.raises(ValueError):
+            calcular_desbalance_utm_mensual(pago)
+        return
+
+    obtenido = calcular_desbalance_utm_mensual(pago)
     if esperado is None:
         assert obtenido is None
     else:
@@ -201,7 +210,14 @@ def test_desbalance_utm_mensual_contra_fixtures(nombre, entrada, esperado):
 @pytest.mark.parametrize("nombre,entrada,esperado", casos("desbalance-utm.json", "acumulado"))
 def test_desbalance_acumulado_utm_contra_fixtures(nombre, entrada, esperado):
     pagos = [a_snake(p) for p in entrada["pagos"]]
-    obtenido = calcular_desbalance_acumulado_utm(entrada["utmValorActual"], pagos)
+    utm_valor_actual = _convertir_no_finito(entrada["utmValorActual"])
+
+    if espera_error(esperado):
+        with pytest.raises(ValueError):
+            calcular_desbalance_acumulado_utm(utm_valor_actual, pagos)
+        return
+
+    obtenido = calcular_desbalance_acumulado_utm(utm_valor_actual, pagos)
 
     assert obtenido["desbalance_acumulado_utm"] == pytest.approx(
         esperado["desbalanceAcumuladoUtm"], abs=TOLERANCIA_ABSOLUTA_PARIDAD_TS

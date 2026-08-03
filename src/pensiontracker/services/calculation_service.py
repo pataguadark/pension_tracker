@@ -96,12 +96,29 @@ def calcular_desbalance_mensual(monto_pagado: float,
 # Desbalance "Valor UTM" (estilo cartola)
 # -------------------------------------------------------------------
 
+def _validar_finito_opcional(valor: float | None, nombre: str) -> float | None:
+    """Valida un dato opcional que, de estar presente, debe ser finito.
+
+    `None` se retorna tal cual: un dato ausente es legítimo (ver
+    docstrings de _factor_de_pago / calcular_desbalance_acumulado_utm).
+    Pero un `nan` o `inf` no es "ausente": es dato corrupto. Comprobar
+    solo con veracidad (`if valor:`) no lo detecta porque `bool(nan)` es
+    `True` en Python — por eso se exige math.isfinite explícitamente, en
+    vez de depender de la veracidad como hacía el código anterior.
+    """
+    if valor is not None and not math.isfinite(valor):
+        raise ValueError(f"{nombre} debe ser un valor finito.")
+    return valor
+
+
 def _factor_de_pago(pago: dict) -> float | None:
     """Factor UTM de un pago: el guardado, o derivado de cuota_pactada/utm_valor."""
-    if pago.get("utm_factor"):
-        return pago["utm_factor"]
-    if pago.get("utm_valor") and pago["utm_valor"] > 0:
-        return pago["cuota_pactada"] / pago["utm_valor"]
+    utm_factor = _validar_finito_opcional(pago.get("utm_factor"), "El factor UTM del pago")
+    if utm_factor:
+        return utm_factor
+    utm_valor = _validar_finito_opcional(pago.get("utm_valor"), "El valor UTM del pago")
+    if utm_valor and utm_valor > 0:
+        return pago["cuota_pactada"] / utm_valor
     return None
 
 
@@ -113,9 +130,10 @@ def calcular_desbalance_utm_mensual(pago: dict) -> float | None:
     por utm_valor > 0 no cambia el signo). None si faltan datos.
     """
     factor = _factor_de_pago(pago)
-    if factor is None or not pago.get("utm_valor"):
+    utm_valor = _validar_finito_opcional(pago.get("utm_valor"), "El valor UTM del pago")
+    if factor is None or not utm_valor:
         return None
-    return (pago["monto_pagado"] / pago["utm_valor"]) - factor
+    return (pago["monto_pagado"] / utm_valor) - factor
 
 
 def calcular_desbalance_acumulado_utm(utm_valor_actual: float | None,
@@ -129,6 +147,8 @@ def calcular_desbalance_acumulado_utm(utm_valor_actual: float | None,
     "desbalance_ajustado" queda en None: no se puede expresar en pesos
     sin una tasa de referencia.
     """
+    utm_valor_actual = _validar_finito_opcional(utm_valor_actual, "El valor UTM vigente")
+
     if pagos is None:
         pagos = db_manager.obtener_todos_los_pagos()
 

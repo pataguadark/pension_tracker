@@ -40,13 +40,36 @@ export function calcularDesbalanceMensual(
   return { diferencia, estado: estadoDe(diferencia) };
 }
 
+/**
+ * Valida un dato opcional que, de estar presente, debe ser finito.
+ *
+ * `null`/`undefined` se retorna tal cual: un dato ausente es legítimo
+ * (ver docstrings de factorDePago / calcularDesbalanceAcumuladoUtm).
+ * Pero un `NaN` o `Infinity` no es "ausente": es dato corrupto.
+ * Comprobar solo con veracidad (`if (valor)`) no lo detecta porque
+ * `Boolean(NaN)` es `false` en JavaScript — por eso se exige
+ * Number.isFinite explícitamente, en vez de depender de la veracidad
+ * como hacía el código anterior.
+ */
+function validarFinitoOpcional(
+  valor: number | null | undefined,
+  nombre: string,
+): number | null | undefined {
+  if (valor !== null && valor !== undefined && !Number.isFinite(valor)) {
+    throw new Error(`${nombre} debe ser un valor finito.`);
+  }
+  return valor;
+}
+
 /** Factor UTM de un pago: el guardado, o derivado de cuota / valor UTM. */
 export function factorDePago(pago: Pago): number | null {
-  if (pago.utmFactor) {
-    return pago.utmFactor;
+  const utmFactor = validarFinitoOpcional(pago.utmFactor, 'El factor UTM del pago');
+  if (utmFactor) {
+    return utmFactor;
   }
-  if (pago.utmValor && pago.utmValor > 0) {
-    return pago.cuotaPactada / pago.utmValor;
+  const utmValor = validarFinitoOpcional(pago.utmValor, 'El valor UTM del pago');
+  if (utmValor && utmValor > 0) {
+    return pago.cuotaPactada / utmValor;
   }
   return null;
 }
@@ -57,10 +80,11 @@ export function factorDePago(pago: Pago): number | null {
  */
 export function calcularDesbalanceUtmMensual(pago: Pago): number | null {
   const factor = factorDePago(pago);
-  if (factor === null || !pago.utmValor) {
+  const utmValor = validarFinitoOpcional(pago.utmValor, 'El valor UTM del pago');
+  if (factor === null || !utmValor) {
     return null;
   }
-  return pago.montoPagado / pago.utmValor - factor;
+  return pago.montoPagado / utmValor - factor;
 }
 
 /**
@@ -75,6 +99,8 @@ export function calcularDesbalanceAcumuladoUtm(
   utmValorActual: number | null,
   pagos: Pago[],
 ): { desbalanceAcumuladoUtm: number; desbalanceAjustado: number | null; estado: Estado } {
+  utmValorActual = validarFinitoOpcional(utmValorActual, 'El valor UTM vigente') ?? null;
+
   let totalUtm = 0;
   for (const pago of pagos) {
     const diff = calcularDesbalanceUtmMensual(pago);

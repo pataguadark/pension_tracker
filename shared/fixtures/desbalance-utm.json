@@ -25,6 +25,26 @@
       "nombre": "sin utmValor no se puede calcular",
       "entrada": { "utmFactor": 3.0, "utmValor": 0, "cuotaPactada": 210000.0, "montoPagado": 215000 },
       "esperado": null
+    },
+    {
+      "nombre": "utmFactor no finito (NaN) debe lanzar error",
+      "entrada": { "utmFactor": "NaN", "utmValor": 70000, "cuotaPactada": 210000.0, "montoPagado": 215000 },
+      "esperado": { "error": true }
+    },
+    {
+      "nombre": "utmFactor no finito (Infinity) debe lanzar error",
+      "entrada": { "utmFactor": "Infinity", "utmValor": 70000, "cuotaPactada": 210000.0, "montoPagado": 215000 },
+      "esperado": { "error": true }
+    },
+    {
+      "nombre": "utmValor no finito (NaN) debe lanzar error",
+      "entrada": { "utmFactor": 3.0, "utmValor": "NaN", "cuotaPactada": 210000.0, "montoPagado": 215000 },
+      "esperado": { "error": true }
+    },
+    {
+      "nombre": "utmValor no finito (Infinity) debe lanzar error",
+      "entrada": { "utmFactor": 3.0, "utmValor": "Infinity", "cuotaPactada": 210000.0, "montoPagado": 215000 },
+      "esperado": { "error": true }
     }
   ],
   "acumulado": [
@@ -66,6 +86,26 @@
         ]
       },
       "esperado": { "desbalanceAcumuladoUtm": 0.0587, "desbalanceAjustado": null, "estado": "EXCEDENTE" }
+    },
+    {
+      "nombre": "utmValorActual no finito (NaN) debe lanzar error",
+      "entrada": {
+        "utmValorActual": "NaN",
+        "pagos": [
+          { "mesPago": 1, "anioPago": 2025, "utmFactor": 3.0, "utmValor": 67294, "cuotaPactada": 201882.0, "montoPagado": 200000, "desbalance": -1882.0 }
+        ]
+      },
+      "esperado": { "error": true }
+    },
+    {
+      "nombre": "utmValorActual no finito (Infinity) debe lanzar error",
+      "entrada": {
+        "utmValorActual": "Infinity",
+        "pagos": [
+          { "mesPago": 1, "anioPago": 2025, "utmFactor": 3.0, "utmValor": 67294, "cuotaPactada": 201882.0, "montoPagado": 200000, "desbalance": -1882.0 }
+        ]
+      },
+      "esperado": { "error": true }
     }
   ]
 }

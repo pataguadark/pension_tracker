@@ -169,7 +169,19 @@ const desbalanceUtm = cargar('desbalance-utm.json');
 // exactamente lo que la función necesita, sin inventar campos.
 describe('calcularDesbalanceUtmMensual contra fixtures', () => {
   it.each(obtenerCasos(desbalanceUtm, 'mensual'))('$nombre', ({ entrada, esperado }) => {
-    const obtenido = calcularDesbalanceUtmMensual(entrada as unknown as Pago);
+    const base = entrada as { utmFactor: unknown; utmValor: unknown };
+    const pago = {
+      ...(entrada as object),
+      utmFactor: convertirNoFinito(base.utmFactor),
+      utmValor: convertirNoFinito(base.utmValor),
+    } as unknown as Pago;
+
+    if (esperaError(esperado)) {
+      expect(() => calcularDesbalanceUtmMensual(pago)).toThrow();
+      return;
+    }
+
+    const obtenido = calcularDesbalanceUtmMensual(pago);
     if (esperado === null) {
       expect(obtenido).toBeNull();
     } else {
@@ -181,10 +193,17 @@ describe('calcularDesbalanceUtmMensual contra fixtures', () => {
 describe('calcularDesbalanceAcumuladoUtm contra fixtures', () => {
   it.each(obtenerCasos(desbalanceUtm, 'acumulado'))('$nombre', ({ entrada, esperado }) => {
     const { utmValorActual, pagos } = entrada as {
-      utmValorActual: number | null;
+      utmValorActual: unknown;
       pagos: Pago[];
     };
-    const obtenido = calcularDesbalanceAcumuladoUtm(utmValorActual, pagos);
+    const valorActual = convertirNoFinito(utmValorActual) as number | null;
+
+    if (esperaError(esperado)) {
+      expect(() => calcularDesbalanceAcumuladoUtm(valorActual, pagos)).toThrow();
+      return;
+    }
+
+    const obtenido = calcularDesbalanceAcumuladoUtm(valorActual, pagos);
     const esp = esperado as {
       desbalanceAcumuladoUtm: number;
       desbalanceAjustado: number | null;
