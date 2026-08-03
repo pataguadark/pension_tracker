@@ -201,39 +201,9 @@ def historial_anio(anio):
         ref["utm_valor"], pagos=estado_anual["pagos"]
     )
 
-    pagos_ordenados = sorted(
-        estado_anual["pagos"],
-        key=lambda p: p["mes_pago"]
+    historial_anual = calculation_service.obtener_historial_desbalances(
+        ref["utm_valor"], pagos=estado_anual["pagos"]
     )
-    acumulado = 0.0
-    acumulado_utm = 0.0
-    for pago in pagos_ordenados:
-        acumulado = round(acumulado + pago["desbalance"], 2)
-        pago["desbalance_corrido"] = acumulado
-        pago["estado_corrido"] = (
-            "EXCEDENTE" if acumulado > 0
-            else "EXACTO" if acumulado == 0
-            else "DEUDA"
-        )
-
-        diff_utm = calculation_service.calcular_desbalance_utm_mensual(pago)
-        pago["desbalance_utm_mes_pesos"] = None
-        pago["desbalance_utm_corrido_pesos"] = None
-        pago["estado_utm_mes"] = None
-        pago["estado_utm_corrido"] = None
-        if diff_utm is not None:
-            acumulado_utm += diff_utm
-            if ref["utm_valor"]:
-                mes_pesos = round(diff_utm * ref["utm_valor"], 2)
-                corrido_pesos = round(acumulado_utm * ref["utm_valor"], 2)
-                pago["desbalance_utm_mes_pesos"] = mes_pesos
-                pago["desbalance_utm_corrido_pesos"] = corrido_pesos
-                pago["estado_utm_mes"] = (
-                    "EXCEDENTE" if mes_pesos > 0 else "EXACTO" if mes_pesos == 0 else "DEUDA"
-                )
-                pago["estado_utm_corrido"] = (
-                    "EXCEDENTE" if corrido_pesos > 0 else "EXACTO" if corrido_pesos == 0 else "DEUDA"
-                )
 
     todos = db_manager.obtener_todos_los_pagos()
     anios_disponibles = sorted(
@@ -243,7 +213,7 @@ def historial_anio(anio):
 
     return render_template(
         "historial.html",
-        pagos=list(reversed(pagos_ordenados)),
+        pagos=historial_anual,
         resumen=estado_anual["resumen"],
         resumen_utm=resumen_utm,
         anios_disponibles=anios_disponibles,
