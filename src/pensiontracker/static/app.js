@@ -12,14 +12,22 @@ function formatearMiles(input) {
 }
 
 function formatearFactor(input) {
-    let val = input.value.replace(/[^0-9,]/g, '');
+    // Se acepta punto además de coma: en los teclados decimales de celular
+    // el punto suele ser lo único disponible. Se normaliza a coma, que es
+    // el separador decimal chileno y lo que el usuario espera ver.
+    let val = input.value.replace(/[^0-9.,]/g, '').replace(/\./g, ',');
+
     const partes = val.split(',');
     if (partes.length > 2) {
-        val = partes[0] + ',' + partes.slice(1).join('');
+        // Varios separadores: el último manda, los anteriores eran de miles.
+        val = partes.slice(0, -1).join('') + ',' + partes[partes.length - 1];
     }
-    if (partes[1] && partes[1].length > 4) {
-        val = partes[0] + ',' + partes[1].slice(0, 4);
+
+    const [entero, decimales] = val.split(',');
+    if (decimales !== undefined && decimales.length > 4) {
+        val = entero + ',' + decimales.slice(0, 4);
     }
+
     input.value = val;
     calcularPreview();
 }
