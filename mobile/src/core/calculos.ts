@@ -41,6 +41,15 @@ export function calcularDesbalanceMensual(
 }
 
 /**
+ * Error de validación de finitud: lo único que
+ * desbalanceUtmMensualTolerante() debe tragarse (ver esa función). Una
+ * clase dedicada, en vez de `Error` genérico, es lo que permite acotar
+ * ese catch — de otro modo no habría forma de distinguir en runtime "un
+ * dato no finito" de cualquier otro bug.
+ */
+class ErrorDatoNoFinito extends Error {}
+
+/**
  * Valida un dato opcional que, de estar presente, debe ser finito.
  *
  * `null`/`undefined` se retorna tal cual: un dato ausente es legítimo
@@ -56,9 +65,30 @@ function validarFinitoOpcional(
   nombre: string,
 ): number | null | undefined {
   if (valor !== null && valor !== undefined && !Number.isFinite(valor)) {
-    throw new Error(`${nombre} debe ser un valor finito.`);
+    throw new ErrorDatoNoFinito(`${nombre} debe ser un valor finito.`);
   }
   return valor;
+}
+
+/**
+ * Trata un valor no finito como una contribución nula al acumularlo.
+ *
+ * Antes de esta rama, calcularCuotaPactada() no comprobaba que el
+ * producto utmFactor × utmValor fuera finito, así que una fila con
+ * cuotaPactada infinita (y por lo tanto desbalance también infinito:
+ * montoPagado - Infinity) pudo quedar persistida en una BD real. Un dato
+ * ya guardado, por corrupto que sea, no debe tumbar el acumulado de las
+ * demás filas (tolerar al leer) — pero tampoco debe "infectarlo" con
+ * Infinity/NaN silenciosamente: sumar +Infinity una vez ya vuelve
+ * infinito cualquier total futuro, y sumar +Infinity con -Infinity de
+ * otra fila da NaN. Se trata como una contribución de 0 (equivalente a
+ * que esa fila no aportara información al acumulado), igual criterio que
+ * el lado Python (ver _finito_o_cero en calculation_service.py) y que ya
+ * se usaba para utmFactor/utmValor en desbalanceUtmMensualTolerante. El
+ * valor crudo de la fila (mostrado individualmente) no se toca acá.
+ */
+function finitoOCero(valor: number): number {
+  return Number.isFinite(valor) ? valor : 0;
 }
 
 /** Factor UTM de un pago: el guardado, o derivado de cuota / valor UTM. */
@@ -103,12 +133,30 @@ export function calcularDesbalanceUtmMensual(pago: Pago): number | null {
  * sobre una lista completa de pagos (obtenerHistorialDesbalances y
  * calcularDesbalanceAcumuladoUtm), que es donde una fila corrupta no
  * debe poder tumbar la vista.
+ *
+ * El catch está acotado a ErrorDatoNoFinito, no es un `catch` desnudo:
+ * un `catch` desnudo se traga CUALQUIER error, y en JavaScript eso es
+ * más peligroso que en Python. `except ValueError` del lado Python no
+ * atrapa otras excepciones (p. ej. AttributeError si `pago` no es un
+ * dict) porque ValueError no es su clase base; el bug se ve. Pero en
+ * JavaScript `TypeError` SÍ es subclase de `Error` (a diferencia de
+ * Python, donde TypeError no es subclase de ValueError), así que ni
+ * siquiera `catch (e) { if (e instanceof Error) ... }` bastaría para
+ * distinguir "dato no finito" de un bug real (p. ej. una fila `null`
+ * colada por error, que lanza TypeError al leer una propiedad). Por eso
+ * se necesita una clase de error dedicada (ErrorDatoNoFinito) en vez de
+ * apoyarse en el tipo de Error: es lo único que reproduce la misma
+ * selectividad que tiene `except ValueError` en Python. Ver
+ * calculos.test.ts para el caso que fija este comportamiento.
  */
 function desbalanceUtmMensualTolerante(pago: Pago): number | null {
   try {
     return calcularDesbalanceUtmMensual(pago);
-  } catch {
-    return null;
+  } catch (error) {
+    if (error instanceof ErrorDatoNoFinito) {
+      return null;
+    }
+    throw error;
   }
 }
 
@@ -174,7 +222,7 @@ export function obtenerHistorialDesbalances(
   const historial: FilaHistorial[] = [];
 
   for (const pago of ordenados) {
-    acumuladoCorrido = redondear(acumuladoCorrido + pago.desbalance, 2);
+    acumuladoCorrido = redondear(acumuladoCorrido + finitoOCero(pago.desbalance), 2);
 
     const diffUtm = desbalanceUtmMensualTolerante(pago);
     if (diffUtm !== null) {
@@ -225,11 +273,11 @@ export function resumirEstadoCuenta(pagos: Pago[]): {
   }
 
   const totalPagado = redondear(
-    pagos.reduce((suma, p) => suma + p.montoPagado, 0), 2);
+    pagos.reduce((suma, p) => suma + finitoOCero(p.montoPagado), 0), 2);
   const totalPactado = redondear(
-    pagos.reduce((suma, p) => suma + p.cuotaPactada, 0), 2);
+    pagos.reduce((suma, p) => suma + finitoOCero(p.cuotaPactada), 0), 2);
   const desbalanceAcumulado = redondear(
-    pagos.reduce((suma, p) => suma + p.desbalance, 0), 2);
+    pagos.reduce((suma, p) => suma + finitoOCero(p.desbalance), 0), 2);
 
   return {
     cantidadPagos: pagos.length,

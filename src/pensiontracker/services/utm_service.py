@@ -20,6 +20,7 @@ Soporta:
   - Fallback: si la API no responde, retorna la última UTM guardada en la BD
 """
 
+import math
 import requests
 from datetime import datetime
 
@@ -140,14 +141,22 @@ def obtener_utm_referencia() -> dict:
     distinto) y lo marca explícitamente para que la UI pueda avisarlo.
 
     Retorna {"utm_valor": float|None, "es_actual": bool}.
+
+    Tolerar al leer: una fila de utm_historial con un valor no finito
+    (persistida por una versión anterior sin el guard de finitud, o por
+    una respuesta corrupta/extrema de mindicador.cl) se trata igual que
+    si no hubiera UTM guardada para ese mes, en vez de propagar el `inf`/
+    `nan` hacia calcular_desbalance_acumulado_utm(), que lo rechaza con
+    ValueError y tumbaría /historial. Ver test_historial_con_utm_vigente_
+    infinita_no_revienta en test_routes.py.
     """
     hoy = datetime.today()
     actual = db_manager.obtener_utm_guardada(hoy.year, hoy.month)
-    if actual:
+    if actual and math.isfinite(actual["utm_valor"]):
         return {"utm_valor": actual["utm_valor"], "es_actual": True}
 
     ultima = db_manager.obtener_ultima_utm_guardada()
-    if ultima:
+    if ultima and math.isfinite(ultima["utm_valor"]):
         return {"utm_valor": ultima["utm_valor"], "es_actual": False}
 
     return {"utm_valor": None, "es_actual": False}
@@ -163,6 +172,14 @@ def obtener_utm_anio(anio: int) -> dict:
     petición a mindicador.cl. Retorna {mes: valor} solo para los meses
     presentes en la serie (los meses futuros/no publicados no aparecen).
 
+    Validar duro al escribir: un "valor" que mindicador.cl devuelva fuera
+    del rango representable por un double (o cualquier otra forma no
+    finita) se descarta en vez de persistirse; ese mes queda como si no
+    hubiera sido publicado todavía, en lugar de guardar `inf`/`nan` en
+    utm_historial (ver obtener_utm_referencia, que tolera una fila así si
+    ya quedó guardada por una versión anterior, pero esta ruta evita que
+    vuelva a ocurrir).
+
     Lanza ScraperError si la petición falla (igual que _get_json).
     """
     serie = _get_json(API_ANIO.format(anio=anio)).get("serie", [])
@@ -176,7 +193,9 @@ def obtener_utm_anio(anio: int) -> dict:
             except ValueError:
                 continue
             if y == anio and item.get("valor") is not None:
-                valores[m] = float(item["valor"])
+                valor = float(item["valor"])
+                if math.isfinite(valor):
+                    valores[m] = valor
     return valores
 
 
@@ -289,7 +308,9 @@ def _get_json(url: str) -> dict:
 def _buscar_mes_en_serie(serie: list, anio: int, mes: int) -> float | None:
     """
     Busca en la serie el registro cuyo 'fecha' coincide con anio/mes.
-    Retorna el valor como float, o None si no está en la serie.
+    Retorna el valor como float, o None si no está en la serie o si el
+    valor recibido no es finito (validar duro al escribir: ver el
+    docstring de obtener_utm_anio, misma razón).
     """
     for item in serie:
         fecha = item.get("fecha", "")
@@ -301,7 +322,9 @@ def _buscar_mes_en_serie(serie: list, anio: int, mes: int) -> float | None:
             except ValueError:
                 continue
             if y == anio and m == mes and item.get("valor") is not None:
-                return float(item["valor"])
+                valor = float(item["valor"])
+                if math.isfinite(valor):
+                    return valor
     return None
 
 

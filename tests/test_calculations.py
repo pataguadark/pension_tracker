@@ -116,6 +116,31 @@ def test_calcular_desbalance_utm_mensual_sin_datos_retorna_none():
     assert calc.calcular_desbalance_utm_mensual({"utm_valor": 0, "cuota_pactada": 0, "monto_pagado": 100}) is None
 
 
+def test_desbalance_utm_mensual_tolerante_no_traga_errores_que_no_sean_valueerror():
+    """
+    Punto 5 (tercer hueco barato) de la revisión: _desbalance_utm_mensual_
+    tolerante() solo captura ValueError (el guard de finitud), no
+    cualquier excepción. Una fila que ni siquiera es un dict (p. ej. una
+    fila `None` colada por un bug en el llamador, no un valor no finito
+    persistido) lanza AttributeError al hacer pago.get(...), y eso debe
+    propagarse, no degradarse a "sin dato UTM" en silencio.
+
+    Simetría con TypeScript: desbalanceUtmMensualTolerante() usaba un
+    `catch` desnudo que sí se tragaba esto (ver calculos.ts /
+    calculos.test.ts); se lo acotó a una clase de error dedicada
+    (ErrorDatoNoFinito) para igualar esta selectividad de Python.
+    """
+    import pytest
+
+    pagos = [
+        {"utm_valor": 70000, "cuota_pactada": 210000, "monto_pagado": 220000, "utm_factor": 3},
+        None,
+    ]
+
+    with pytest.raises(AttributeError):
+        calc.calcular_desbalance_acumulado_utm(70000, pagos=pagos)
+
+
 def test_calcular_desbalance_acumulado_utm_caso_tipico():
     pagos = [
         {"utm_valor": 70000, "cuota_pactada": 210000, "monto_pagado": 220000, "utm_factor": 3},

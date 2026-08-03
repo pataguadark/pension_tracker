@@ -263,23 +263,35 @@ def editar_pago_post(pago_id):
             flash(e, "error")
         return redirect(url_for("pagos.editar_pago", pago_id=pago_id))
 
-    cuota_pactada = calculation_service.calcular_cuota_pactada(
-        valores["utm_factor"], valores["utm_valor"])
-    desbalance = round(valores["monto_pagado"] - cuota_pactada, 2)
+    try:
+        cuota_pactada = calculation_service.calcular_cuota_pactada(
+            valores["utm_factor"], valores["utm_valor"])
+        desbalance = round(valores["monto_pagado"] - cuota_pactada, 2)
 
-    db_manager.actualizar_pago(
-        pago_id=pago_id,
-        fecha=fecha,
-        mes_pago=valores["mes_pago"],
-        anio_pago=valores["anio_pago"],
-        utm_valor=valores["utm_valor"],
-        cuota_pactada=cuota_pactada,
-        monto_pagado=valores["monto_pagado"],
-        desbalance=desbalance,
-        utm_factor=valores["utm_factor"],
-    )
+        db_manager.actualizar_pago(
+            pago_id=pago_id,
+            fecha=fecha,
+            mes_pago=valores["mes_pago"],
+            anio_pago=valores["anio_pago"],
+            utm_valor=valores["utm_valor"],
+            cuota_pactada=cuota_pactada,
+            monto_pagado=valores["monto_pagado"],
+            desbalance=desbalance,
+            utm_factor=valores["utm_factor"],
+        )
 
-    db_manager.guardar_utm(valores["anio_pago"], valores["mes_pago"], valores["utm_valor"])
+        db_manager.guardar_utm(valores["anio_pago"], valores["mes_pago"], valores["utm_valor"])
+
+    except Exception as e:
+        # Mismo patrón que registro_post(): un factor con muchos dígitos
+        # pasa limpiar_factor (son dígitos ASCII válidos) pero puede hacer
+        # que el producto utm_factor × utm_valor desborde a infinito, y
+        # calcular_cuota_pactada lo rechaza con ValueError. Sin este
+        # try/except esa excepción no se capturaba acá (a diferencia de
+        # registro_post), y /editar/<id> respondía 500 en vez de 302 con
+        # un mensaje de error, como hacía la versión publicada.
+        flash(f"Error al procesar el pago: {str(e)}", "error")
+        return redirect(url_for("pagos.editar_pago", pago_id=pago_id))
 
     flash(f"✅ Pago #{pago_id} actualizado correctamente.", "success")
     return redirect(url_for("pagos.historial"))

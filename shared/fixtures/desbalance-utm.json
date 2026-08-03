@@ -32,6 +32,11 @@
       "esperado": 0.14860165839450756
     },
     {
+      "nombre": "utmFactor 0 (falsy pero guardado, no ausente) se deriva de cuota y utm, no se usa 0 como factor (protege el mutante 'utm_factor is not None')",
+      "entrada": { "utmFactor": 0, "utmValor": 70000, "cuotaPactada": 210000.0, "montoPagado": 215000 },
+      "esperado": 0.07142857142857162
+    },
+    {
       "nombre": "sin utmValor no se puede calcular",
       "entrada": { "utmFactor": 3.0, "utmValor": 0, "cuotaPactada": 210000.0, "montoPagado": 215000 },
       "esperado": null

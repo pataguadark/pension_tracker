@@ -124,6 +124,26 @@ def _validar_finito_opcional(valor: float | None, nombre: str) -> float | None:
     return valor
 
 
+def _finito_o_cero(valor: float) -> float:
+    """
+    Trata un valor no finito como una contribución nula al acumularlo.
+
+    Antes de esta rama, calcular_cuota_pactada() no comprobaba que el
+    producto utm_factor × utm_valor fuera finito, así que una fila con
+    cuota_pactada infinita (y por lo tanto desbalance también infinito:
+    monto_pagado - inf) pudo quedar persistida en una BD real. Un dato ya
+    guardado, por corrupto que sea, no debe tumbar el acumulado de las
+    demás filas (tolerar al leer) — pero tampoco debe "infectarlo" con
+    inf/nan silenciosamente: sumar +inf una vez ya vuelve infinito
+    cualquier total futuro, y sumar +inf con -inf de otra fila da NaN.
+    Se trata como una contribución de 0 (equivalente a que esa fila no
+    aportara información al acumulado), igual que ya se hacía para
+    utm_factor/utm_valor en _desbalance_utm_mensual_tolerante. El valor
+    crudo de la fila (mostrado individualmente) no se toca acá.
+    """
+    return valor if math.isfinite(valor) else 0.0
+
+
 def _factor_de_pago(pago: dict) -> float | None:
     """Factor UTM de un pago: el guardado, o derivado de cuota_pactada/utm_valor."""
     utm_factor = _validar_finito_opcional(pago.get("utm_factor"), "El factor UTM del pago")
@@ -364,9 +384,9 @@ def resumir_estado_cuenta(pagos: list) -> dict:
             "estado":               "EXACTO",
         }
 
-    total_pagado = round(sum(p["monto_pagado"] for p in pagos), 2)
-    total_pactado = round(sum(p["cuota_pactada"] for p in pagos), 2)
-    desbalance_acumulado = round(sum(p["desbalance"] for p in pagos), 2)
+    total_pagado = round(sum(_finito_o_cero(p["monto_pagado"]) for p in pagos), 2)
+    total_pactado = round(sum(_finito_o_cero(p["cuota_pactada"]) for p in pagos), 2)
+    desbalance_acumulado = round(sum(_finito_o_cero(p["desbalance"]) for p in pagos), 2)
     estado = ("EXCEDENTE" if desbalance_acumulado > 0
               else "DEUDA" if desbalance_acumulado < 0
               else "EXACTO")
@@ -457,7 +477,7 @@ def obtener_historial_desbalances(utm_valor_actual: float | None = None,
     historial = []
 
     for pago in pagos_ordenados:
-        acumulado_corrido = round(acumulado_corrido + pago["desbalance"], 2)
+        acumulado_corrido = round(acumulado_corrido + _finito_o_cero(pago["desbalance"]), 2)
 
         diff_utm = _desbalance_utm_mensual_tolerante(pago)
         if diff_utm is not None:

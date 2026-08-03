@@ -164,18 +164,26 @@ describe('calcularDesbalanceMensual contra fixtures', () => {
 });
 
 /**
- * Aplica convertirNoFinito a utmFactor/utmValor de un pago dentro de una
- * lista. Se usa en los bloques "acumulado" e "historial", donde cada
- * pago vive dentro de un arreglo: ahí se necesita poder representar una
- * fila individual con un valor no finito persistido (una fila corrupta
- * no debe tumbar el cálculo agregado de las demás), sin tocar el resto
- * de los campos del pago.
+ * Aplica convertirNoFinito a utmFactor/utmValor/cuotaPactada/montoPagado/
+ * desbalance de un pago dentro de una lista. Se usa en los bloques
+ * "acumulado", "historial" y "resumen", donde cada pago vive dentro de
+ * un arreglo: ahí se necesita poder representar una fila individual con
+ * un valor no finito persistido (una fila corrupta no debe tumbar el
+ * cálculo agregado de las demás), sin tocar el resto de los campos del
+ * pago. Además de utmFactor/utmValor (fila con utmFactor infinito no
+ * tumba el cálculo agregado), cuotaPactada/montoPagado/desbalance pueden
+ * quedar infinitos si una versión anterior guardó un producto
+ * utmFactor×utmValor desbordado (calcularCuotaPactada valida el producto
+ * recién en esta rama).
  */
 function convertirNoFinitosDePago(pago: Pago): Pago {
   return {
     ...pago,
     utmFactor: convertirNoFinito(pago.utmFactor) as number | null,
     utmValor: convertirNoFinito(pago.utmValor) as number,
+    cuotaPactada: convertirNoFinito(pago.cuotaPactada) as number,
+    montoPagado: convertirNoFinito(pago.montoPagado) as number,
+    desbalance: convertirNoFinito(pago.desbalance) as number,
   };
 }
 
@@ -287,7 +295,8 @@ describe('obtenerHistorialDesbalances contra fixtures', () => {
 
 describe('resumirEstadoCuenta contra fixtures', () => {
   it.each(obtenerCasos(historialCorrido, 'resumen'))('$nombre', ({ entrada, esperado }) => {
-    const { pagos } = entrada as { pagos: Pago[] };
+    const { pagos: pagosCrudos } = entrada as { pagos: Pago[] };
+    const pagos = pagosCrudos.map(convertirNoFinitosDePago);
     const obtenido = resumirEstadoCuenta(pagos);
     const esp = esperado as {
       cantidadPagos: number;

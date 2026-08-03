@@ -110,6 +110,30 @@ def test_historial_con_fila_utm_factor_infinito_no_revienta(client):
     assert "202.287".encode() in resp_anio.data
 
 
+def test_historial_con_utm_vigente_infinita_no_revienta(client):
+    """
+    Regresión: utm_service.obtener_utm_anio() hacía float(item["valor"])
+    sobre la respuesta de mindicador.cl sin comprobar finitud, así que un
+    valor extremo (o ya corrupto en una BD real) podía quedar persistido
+    como infinito en utm_historial. v1.0.2 respondía 200 en ese estado;
+    con el guard de finitud que calcular_desbalance_acumulado_utm agregó
+    para el valor UTM vigente, /historial y /historial/<anio> reventaban
+    con un ValueError sin capturar. Un utm_valor_actual no finito debe
+    tratarse como "sin UTM de referencia" (estado ya soportado), no tumbar
+    la vista.
+    """
+    hoy = datetime.today()
+    db_manager.guardar_utm(hoy.year, hoy.month, float("inf"))
+    _registrar_pago(client)
+
+    resp = client.get("/historial")
+    assert resp.status_code == 200
+    assert "No se pudo calcular el valor UTM".encode() in resp.data
+
+    resp_anio = client.get(f"/historial/{hoy.year}")
+    assert resp_anio.status_code == 200
+
+
 def test_editar_pago_actualiza_valores(client):
     _registrar_pago(client)
 
@@ -129,6 +153,67 @@ def test_editar_pago_actualiza_valores(client):
 
     assert resp.status_code == 200
     assert b"220.000" in resp.data
+
+
+def test_editar_pago_con_producto_que_desborda_no_revienta(client):
+    """
+    Regresión (punto 2 de la revisión): routes/pagos.py llamaba a
+    calcular_cuota_pactada en el manejador de edición SIN try/except, a
+    diferencia del de registro. Un factor de 309 dígitos pasa
+    limpiar_factor (son dígitos ASCII válidos), pero al multiplicarlo por
+    utm_valor el producto desborda a infinito y calcular_cuota_pactada
+    lanza ValueError. v1.0.2 respondía 302 tanto en /registro como en
+    /editar; con el guard de finitud nuevo, /registro sigue respondiendo
+    302 (lo captura), pero /editar reventaba con 500. Debe comportarse
+    igual que /registro: capturar y mostrar el error.
+    """
+    _registrar_pago(client)
+
+    resp = client.get("/editar/1")
+    assert resp.status_code == 200
+    token = extraer_csrf_token(resp.get_data(as_text=True))
+
+    resp = client.post("/editar/1", data={
+        "csrf_token": token,
+        "utm_factor": "1" * 309,
+        "utm_valor": "70.000",
+        "monto_pagado": "220.000",
+        "mes_pago": "8",
+        "anio_pago": "2026",
+        "fecha": "2026-08-01",
+    })
+    assert resp.status_code == 302
+
+    resp = client.get(resp.headers["Location"])
+    assert resp.status_code == 200
+    assert "Error al procesar el pago".encode() in resp.data
+
+    # El pago original no debe haberse alterado por el intento fallido.
+    pago = db_manager.obtener_pago_por_id(1)
+    assert pago["monto_pagado"] != 220000
+
+
+def test_registro_con_producto_que_desborda_no_revienta(client):
+    """Mismo escenario que el test anterior, pero para /registro: fija el
+    comportamiento existente (302 + mensaje) para que una futura
+    regresión en el manejador de registro también quede detectada."""
+    resp = client.get("/registro")
+    token = extraer_csrf_token(resp.get_data(as_text=True))
+
+    resp = client.post("/registro", data={
+        "csrf_token": token,
+        "utm_factor": "1" * 309,
+        "utm_valor": "70.000",
+        "monto_pagado": "220.000",
+        "mes_pago": "8",
+        "anio_pago": "2026",
+        "fecha": "2026-08-01",
+    })
+    assert resp.status_code == 302
+
+    resp = client.get(resp.headers["Location"])
+    assert resp.status_code == 200
+    assert "Error al procesar el pago".encode() in resp.data
 
 
 def test_editar_pago_inexistente_redirige_a_historial(client):

@@ -111,6 +111,20 @@
       ]
     },
     {
+      "nombre": "fila con cuotaPactada infinita (persistida por una version anterior sin el guard del producto utmFactor x utmValor) no tumba el desbalance acumulado en pesos: esa fila no aporta al corrido, pero su calculo UTM sigue intacto porque usa el utmFactor guardado, no la cuota",
+      "entrada": {
+        "utmValorActual": 70000,
+        "pagos": [
+          { "mesPago": 1, "anioPago": 2025, "utmFactor": 3.0, "utmValor": 67294, "cuotaPactada": 201882.0, "montoPagado": 200000, "desbalance": -1882.0 },
+          { "mesPago": 2, "anioPago": 2025, "utmFactor": 3.0, "utmValor": 67429, "cuotaPactada": "Infinity", "montoPagado": 202287, "desbalance": "-Infinity" }
+        ]
+      },
+      "esperado": [
+        { "mesPago": 2, "desbalanceCorrido": -1882.0, "estadoCorrido": "DEUDA", "desbalanceUtmMesPesos": 0.0, "desbalanceUtmCorridoPesos": -1957.68, "estadoUtmMes": "EXACTO", "estadoUtmCorrido": "DEUDA" },
+        { "mesPago": 1, "desbalanceCorrido": -1882.0, "estadoCorrido": "DEUDA", "desbalanceUtmMesPesos": -1957.68, "desbalanceUtmCorridoPesos": -1957.68, "estadoUtmMes": "DEUDA", "estadoUtmCorrido": "DEUDA" }
+      ]
+    },
+    {
       "nombre": "saldo corrido exactamente cero es EXACTO, no EXCEDENTE",
       "entrada": {
         "utmValorActual": 70000,
@@ -170,6 +184,26 @@
         ]
       },
       "esperado": { "cantidadPagos": 2, "totalPagado": 300000, "totalPactado": 290000.0, "desbalanceAcumulado": 5000.0, "estado": "EXCEDENTE" }
+    },
+    {
+      "nombre": "dos pagos que se cancelan dan acumulado EXACTO cero, no EXCEDENTE (protege el mutante desbalance_acumulado >= 0)",
+      "entrada": {
+        "pagos": [
+          { "mesPago": 1, "anioPago": 2025, "utmFactor": 3.0, "utmValor": 67294, "cuotaPactada": 201882.0, "montoPagado": 191882, "desbalance": -10000.0 },
+          { "mesPago": 2, "anioPago": 2025, "utmFactor": 3.0, "utmValor": 67429, "cuotaPactada": 202287.0, "montoPagado": 212287, "desbalance": 10000.0 }
+        ]
+      },
+      "esperado": { "cantidadPagos": 2, "totalPagado": 404169, "totalPactado": 404169.0, "desbalanceAcumulado": 0.0, "estado": "EXACTO" }
+    },
+    {
+      "nombre": "fila con montoPagado, cuotaPactada y desbalance no finitos (cada uno de forma independiente) no tumba el resumen: cada campo no finito aporta 0 a su propia suma",
+      "entrada": {
+        "pagos": [
+          { "mesPago": 1, "anioPago": 2025, "utmFactor": 3.0, "utmValor": 67294, "cuotaPactada": 201882.0, "montoPagado": 200000, "desbalance": -1882.0 },
+          { "mesPago": 2, "anioPago": 2025, "utmFactor": 3.0, "utmValor": 67429, "cuotaPactada": "Infinity", "montoPagado": "-Infinity", "desbalance": "NaN" }
+        ]
+      },
+      "esperado": { "cantidadPagos": 2, "totalPagado": 200000.0, "totalPactado": 201882.0, "desbalanceAcumulado": -1882.0, "estado": "DEUDA" }
     }
   ]
 }

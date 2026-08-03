@@ -191,19 +191,31 @@ def a_snake(pago: dict) -> dict:
     return {MAPA_CLAVES.get(k, k): v for k, v in pago.items()}
 
 
+# Campos de un pago que pueden necesitar representar un valor no finito
+# en una fixture (fila corrupta persistida por una versión anterior sin
+# el guard de finitud correspondiente). Además de utm_factor/utm_valor
+# (punto 2 de la revisión: fila con utm_factor infinito no debe tumbar el
+# cálculo agregado), cuota_pactada/monto_pagado/desbalance pueden quedar
+# infinitas si una versión anterior guardó un producto utm_factor×utm_valor
+# desbordado (punto 4 de la revisión: calcular_cuota_pactada valida el
+# producto recién en esta rama, así que una fila así ya pudo persistirse).
+_CAMPOS_NO_FINITOS_PAGO = (
+    "utm_factor", "utm_valor", "cuota_pactada", "monto_pagado", "desbalance"
+)
+
+
 def a_snake_con_no_finitos(pago: dict) -> dict:
-    """a_snake() más la conversión "NaN"/"Infinity"/"-Infinity" de
-    utm_factor/utm_valor. Se usa en los bloques "acumulado" e "historial",
-    donde cada pago vive dentro de una lista: ahí se necesita poder
-    representar una fila individual con un valor no finito persistido
-    (ver punto 2 de la revisión: una fila corrupta no debe tumbar el
-    cálculo agregado de las demás), sin afectar los demás campos del pago.
+    """a_snake() más la conversión "NaN"/"Infinity"/"-Infinity" de los
+    campos de _CAMPOS_NO_FINITOS_PAGO. Se usa en los bloques "acumulado",
+    "historial" y "resumen", donde cada pago vive dentro de una lista: ahí
+    se necesita poder representar una fila individual con un valor no
+    finito persistido (una fila corrupta no debe tumbar el cálculo
+    agregado de las demás), sin afectar los demás campos del pago.
     """
     convertido = a_snake(pago)
-    if "utm_factor" in convertido:
-        convertido["utm_factor"] = _convertir_no_finito(convertido["utm_factor"])
-    if "utm_valor" in convertido:
-        convertido["utm_valor"] = _convertir_no_finito(convertido["utm_valor"])
+    for clave in _CAMPOS_NO_FINITOS_PAGO:
+        if clave in convertido:
+            convertido[clave] = _convertir_no_finito(convertido[clave])
     return convertido
 
 
@@ -295,7 +307,7 @@ def test_resumen_estado_cuenta_contra_fixtures(nombre, entrada, esperado):
     resumir_estado_cuenta() tras leer de la BD. Se invoca acá directamente
     la función pura de producción (mismo patrón que hace resumirEstadoCuenta
     del lado TypeScript), en vez de reimplementar la aritmética en el test."""
-    pagos = [a_snake(p) for p in entrada["pagos"]]
+    pagos = [a_snake_con_no_finitos(p) for p in entrada["pagos"]]
 
     obtenido = resumir_estado_cuenta(pagos)
 

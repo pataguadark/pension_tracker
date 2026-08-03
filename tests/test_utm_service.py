@@ -168,6 +168,41 @@ def test_obtener_utm_referencia_retorna_none_sin_datos(db_temporal):
     assert ref == {"utm_valor": None, "es_actual": False}
 
 
+def test_obtener_utm_referencia_trata_valor_actual_infinito_como_ausente(db_temporal):
+    """
+    Regresión (punto 1 de la revisión): una fila de utm_historial con un
+    valor infinito (persistida por una versión anterior sin el guard de
+    finitud) no debe propagarse como utm_valor_actual: eso es lo que
+    hacía reventar /historial con un ValueError sin capturar, cuando la
+    v1.0.2 publicada respondía 200 en ese mismo estado. Al leer, se trata
+    como si no hubiera UTM guardada para el mes: "sin UTM de referencia".
+
+    Nota de simetría: calcular_desbalance_acumulado_utm() sigue lanzando
+    ValueError si se le pasa un utm_valor_actual no finito DIRECTAMENTE
+    (ver desbalance-utm.json, bloque "acumulado", casos "no finito ...
+    debe lanzar error") — ese es el contrato correcto para una llamada
+    directa. Lo que cambia acá es que obtener_utm_referencia() nunca deja
+    que un valor corrupto ya persistido llegue a ese punto.
+    """
+    hoy = datetime.today()
+    db_manager.guardar_utm(hoy.year, hoy.month, float("inf"))
+
+    ref = utm_service.obtener_utm_referencia()
+
+    assert ref == {"utm_valor": None, "es_actual": False}
+
+
+def test_obtener_utm_referencia_trata_ultima_infinita_como_ausente(db_temporal):
+    """Mismo caso que el anterior, pero cuando la fila infinita es la que
+    cae por el camino de "última guardada" (mes actual sin dato propio)."""
+    anio_pasado = datetime.today().year - 1
+    db_manager.guardar_utm(anio_pasado, 1, float("inf"))
+
+    ref = utm_service.obtener_utm_referencia()
+
+    assert ref == {"utm_valor": None, "es_actual": False}
+
+
 # -------------------------------------------------------------------
 # obtener_utm_anio / obtener_utm_mes_con_cache (completar meses pasados)
 # -------------------------------------------------------------------
@@ -250,6 +285,47 @@ def test_obtener_utm_mes_con_cache_mes_no_publicado_retorna_no_disponible(monkey
     assert resultado["fuente"] == "no_disponible"
     # Igual se cachea lo que sí vino en la respuesta.
     assert db_manager.obtener_utm_guardada(2024, 1)["utm_valor"] == 65000.0
+
+
+def test_obtener_utm_anio_descarta_valores_no_finitos(monkeypatch):
+    """
+    Regresión (punto 1 de la revisión, frente de escritura): mindicador.cl
+    es una fuente externa; un "valor" fuera del rango representable por un
+    double (p. ej. un número con cientos de dígitos) decodifica a `inf` al
+    pasar por float(), y antes de este fix se persistía tal cual en
+    utm_historial. Ahora ese mes se descarta (como si no hubiera sido
+    publicado), en vez de guardar un valor corrupto.
+    """
+    serie = [
+        {"fecha": "2024-01-01T04:00:00.000Z", "valor": 65000},
+        {"fecha": "2024-02-01T04:00:00.000Z", "valor": float("inf")},
+        {"fecha": "2024-03-01T04:00:00.000Z", "valor": float("nan")},
+    ]
+    monkeypatch.setattr(
+        utm_service.requests, "get",
+        Mock(return_value=_mock_respuesta_ok(serie)),
+    )
+
+    valores = utm_service.obtener_utm_anio(2024)
+
+    assert valores == {1: 65000.0}
+
+
+def test_obtener_utm_mes_con_cache_no_cachea_valor_infinito_de_la_api(monkeypatch, db_temporal):
+    """Extremo a extremo del frente de escritura: un valor infinito que
+    venga de mindicador.cl no debe terminar guardado por
+    obtener_utm_mes_con_cache (usado al completar meses pasados)."""
+    serie = [{"fecha": "2024-05-01T04:00:00.000Z", "valor": float("inf")}]
+    monkeypatch.setattr(
+        utm_service.requests, "get",
+        Mock(return_value=_mock_respuesta_ok(serie)),
+    )
+
+    resultado = utm_service.obtener_utm_mes_con_cache(2024, 5)
+
+    assert resultado["utm"] is None
+    assert resultado["fuente"] == "no_disponible"
+    assert db_manager.obtener_utm_guardada(2024, 5) is None
 
 
 def test_obtener_utm_mes_con_cache_error_de_red_retorna_no_disponible(monkeypatch, db_temporal):
