@@ -258,7 +258,7 @@ Para recarga automática al guardar, `export PT_DEBUG=1` antes de arrancar (o co
 uv run pytest
 ```
 
-139 tests, aislados por completo de tu base de datos real: cada uno usa una BD SQLite
+270 tests, aislados por completo de tu base de datos real: cada uno usa una BD SQLite
 temporal (`tmp_path`).
 
 ### Construir los binarios
@@ -289,8 +289,28 @@ pension_tracker/
 │   ├── static/                 # CSS, JS, fuentes, iconos, manifest, service worker
 │   └── templates/              # HTML (Jinja2)
 ├── tests/                      # pytest — routes, db_manager, utm_service, cálculos
+├── shared/fixtures/            # casos dorados que verifican Python y TypeScript
+├── mobile/src/core/            # port de la aritmética a TypeScript (app Android)
 ├── packaging/                  # PyInstaller spec, iconos, receta AppImage
-└── .github/workflows/build.yml # build multi-SO + release al taguear
+└── .github/workflows/          # build.yml (release) y tests.yml (ambas suites)
+```
+
+### Dos implementaciones de la misma aritmética
+
+La app Android en preparación no puede reutilizar el código Python: Capacitor
+envuelve una aplicación web y no ejecuta Python. Por eso la lógica de cálculo
+existe dos veces, en `src/pensiontracker/` y en `mobile/src/core/`.
+
+Que las dos divergieran significaría que alguien ve saldos distintos en su
+computador y en su teléfono, sin saber cuál creer. Para impedirlo,
+`shared/fixtures/*.json` guarda casos de entrada con su resultado esperado, y
+**ambas suites leen esos mismos archivos**: `pytest` verifica la implementación
+Python y `vitest` la de TypeScript. Si una se desvía, el CI se detiene.
+
+```bash
+npm install --prefix mobile
+npm run typecheck --prefix mobile
+npm test --prefix mobile
 ```
 
 ### Stack
