@@ -628,7 +628,11 @@ Cada caso tiene `nombre`, `entrada` y `esperado`. Un caso que debe fallar usa
     { "nombre": "solo espacios", "entrada": "   ", "esperado": { "error": true } },
     { "nombre": "texto", "entrada": "abc", "esperado": { "error": true } },
     { "nombre": "no finito nan", "entrada": "nan", "esperado": { "error": true } },
-    { "nombre": "no finito inf", "entrada": "inf", "esperado": { "error": true } }
+    { "nombre": "no finito inf", "entrada": "inf", "esperado": { "error": true } },
+    { "nombre": "notacion cientifica", "entrada": "1e10", "esperado": { "error": true } },
+    { "nombre": "notacion cientifica con decimal", "entrada": "3.5e2", "esperado": { "error": true } },
+    { "nombre": "signo mas explicito", "entrada": "+3,5", "esperado": { "error": true } },
+    { "nombre": "negativo se parsea, lo rechaza la validacion de la ruta", "entrada": "-3,5", "esperado": -3.5 }
   ],
   "limpiarEntero": [
     { "nombre": "miles con punto", "entrada": "69.889", "esperado": 69889 },
@@ -646,7 +650,11 @@ Cada caso tiene `nombre`, `entrada` y `esperado`. Un caso que debe fallar usa
   "formatearPesos": [
     { "nombre": "redondea hacia arriba", "entrada": 68923.5, "esperado": "$68.924" },
     { "nombre": "miles con punto", "entrada": 5898, "esperado": "$5.898" },
-    { "nombre": "cero", "entrada": 0, "esperado": "$0" }
+    { "nombre": "cero", "entrada": 0, "esperado": "$0" },
+    { "nombre": "negativo con miles", "entrada": -5898, "esperado": "$-5.898" },
+    { "nombre": "negativo que redondea a cero conserva el signo", "entrada": -0.25, "esperado": "$-0" },
+    { "nombre": "negativo en el limite del empate", "entrada": -0.5, "esperado": "$-0" },
+    { "nombre": "negativo justo pasado el empate", "entrada": -0.51, "esperado": "$-1" }
   ]
 }
 ```
