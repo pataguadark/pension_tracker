@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { EjecutorNode } from './ejecutor-node';
 import { inicializarBd } from './esquema';
-import { RepositorioPagos } from './repositorio';
+import { RepositorioConfiguracion, RepositorioPagos, RepositorioUtm } from './repositorio';
+
+const AHORA = '2025-06-15 10:30:00';
 
 const PAGO_BASE = {
   fecha: '2025-01-05',
@@ -204,5 +206,99 @@ describe('obtenerResumenAnual', () => {
       totalPactado: 0,
       desbalanceAcumulado: 0,
     });
+  });
+});
+
+describe('RepositorioUtm', () => {
+  let utm: RepositorioUtm;
+  beforeEach(() => { utm = new RepositorioUtm(ejecutor); });
+
+  it('guarda y recupera el valor de un mes', async () => {
+    await utm.guardarUtm(2025, 1, 67294, AHORA);
+    expect(await utm.obtenerUtmGuardada(2025, 1)).toEqual({
+      anio: 2025, mes: 1, utmValor: 67294, fechaRegistro: AHORA,
+    });
+  });
+
+  it('un mes sin guardar devuelve null', async () => {
+    expect(await utm.obtenerUtmGuardada(2099, 1)).toBeNull();
+  });
+
+  it('guardar dos veces el mismo mes reemplaza en vez de duplicar', async () => {
+    await utm.guardarUtm(2025, 1, 67294, AHORA);
+    await utm.guardarUtm(2025, 1, 68000, '2025-07-01 09:00:00');
+    expect((await utm.obtenerUtmGuardada(2025, 1))!.utmValor).toBe(68000);
+    const filas = await ejecutor.consultar<{ n: number }>(
+      'SELECT COUNT(*) AS n FROM utm_historial',
+    );
+    expect(filas[0]!.n).toBe(1);
+  });
+
+  it('guardarUtmBulk escribe varios meses de una vez', async () => {
+    await utm.guardarUtmBulk(2025, new Map([[1, 67294], [2, 67429], [3, 68034]]), AHORA);
+    expect((await utm.obtenerUtmGuardada(2025, 2))!.utmValor).toBe(67429);
+    const filas = await ejecutor.consultar<{ n: number }>(
+      'SELECT COUNT(*) AS n FROM utm_historial',
+    );
+    expect(filas[0]!.n).toBe(3);
+  });
+
+  it('guardarUtmBulk con un mapa vacío no hace nada ni falla', async () => {
+    await utm.guardarUtmBulk(2025, new Map(), AHORA);
+    const filas = await ejecutor.consultar<{ n: number }>(
+      'SELECT COUNT(*) AS n FROM utm_historial',
+    );
+    expect(filas[0]!.n).toBe(0);
+  });
+
+  it('obtenerUltimaUtmGuardada devuelve la del mes más reciente', async () => {
+    await utm.guardarUtmBulk(2024, new Map([[11, 66000], [12, 66500]]), AHORA);
+    await utm.guardarUtmBulk(2025, new Map([[1, 67294]]), AHORA);
+    expect(await utm.obtenerUltimaUtmGuardada()).toEqual({
+      anio: 2025, mes: 1, utmValor: 67294, fechaRegistro: AHORA,
+    });
+  });
+
+  it('sin ninguna UTM guardada devuelve null', async () => {
+    expect(await utm.obtenerUltimaUtmGuardada()).toBeNull();
+  });
+
+  it('obtenerUltimoFactorUtm ignora los pagos sin factor', async () => {
+    await repo.insertarPago({ ...PAGO_BASE, mesPago: 1, utmFactor: 3.0 });
+    await repo.insertarPago({ ...PAGO_BASE, mesPago: 2, utmFactor: null });
+    expect(await utm.obtenerUltimoFactorUtm()).toBe(3.0);
+  });
+
+  it('con dos pagos del mismo mes gana el registrado después', async () => {
+    // El desempate por id DESC del escritorio; sin él, el resultado
+    // dependería del orden físico de las filas.
+    await repo.insertarPago({ ...PAGO_BASE, mesPago: 4, anioPago: 2025, utmFactor: 3.0 });
+    await repo.insertarPago({ ...PAGO_BASE, mesPago: 4, anioPago: 2025, utmFactor: 4.25 });
+    expect(await utm.obtenerUltimoFactorUtm()).toBe(4.25);
+  });
+
+  it('sin pagos con factor devuelve null', async () => {
+    await repo.insertarPago({ ...PAGO_BASE, utmFactor: null });
+    expect(await utm.obtenerUltimoFactorUtm()).toBeNull();
+  });
+});
+
+describe('RepositorioConfiguracion', () => {
+  let config: RepositorioConfiguracion;
+  beforeEach(() => { config = new RepositorioConfiguracion(ejecutor); });
+
+  it('guarda y recupera un valor', async () => {
+    await config.guardarConfiguracion('factor_predeterminado', '3.0561');
+    expect(await config.obtenerConfiguracion('factor_predeterminado')).toBe('3.0561');
+  });
+
+  it('una clave inexistente devuelve null', async () => {
+    expect(await config.obtenerConfiguracion('no_existe')).toBeNull();
+  });
+
+  it('guardar dos veces la misma clave reemplaza el valor', async () => {
+    await config.guardarConfiguracion('k', 'uno');
+    await config.guardarConfiguracion('k', 'dos');
+    expect(await config.obtenerConfiguracion('k')).toBe('dos');
   });
 });

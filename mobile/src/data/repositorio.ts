@@ -152,3 +152,114 @@ export class RepositorioPagos {
     };
   }
 }
+
+export interface UtmGuardada {
+  anio: number;
+  mes: number;
+  utmValor: number;
+  fechaRegistro: string;
+}
+
+interface FilaUtm {
+  anio: number;
+  mes: number;
+  utm_valor: number;
+  fecha_registro: string;
+}
+
+function aUtm(fila: FilaUtm): UtmGuardada {
+  return {
+    anio: fila.anio,
+    mes: fila.mes,
+    utmValor: fila.utm_valor,
+    fechaRegistro: fila.fecha_registro,
+  };
+}
+
+/** Momento actual en el formato que usa la columna fecha_registro. */
+function ahoraPorDefecto(): string {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ` +
+         `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+
+export class RepositorioUtm {
+  constructor(private readonly ejecutor: EjecutorSql) {}
+
+  /** Guarda o reemplaza el valor UTM de un mes. */
+  async guardarUtm(anio: number, mes: number, utmValor: number,
+                   ahora: string = ahoraPorDefecto()): Promise<void> {
+    await this.ejecutor.correr(
+      `INSERT OR REPLACE INTO utm_historial (anio, mes, utm_valor, fecha_registro)
+       VALUES (?, ?, ?, ?)`,
+      [anio, mes, utmValor, ahora],
+    );
+  }
+
+  /**
+   * Guarda varios meses de un mismo año. mindicador.cl trae el año
+   * completo en una petición, así que se cachea todo lo recibido en vez
+   * de hacer una escritura por mes.
+   */
+  async guardarUtmBulk(anio: number, valores: Map<number, number>,
+                       ahora: string = ahoraPorDefecto()): Promise<void> {
+    if (valores.size === 0) return;
+    for (const [mes, valor] of valores) {
+      await this.guardarUtm(anio, mes, valor, ahora);
+    }
+  }
+
+  /** UTM guardada de un mes, o null si no está. */
+  async obtenerUtmGuardada(anio: number, mes: number): Promise<UtmGuardada | null> {
+    const filas = await this.ejecutor.consultar<FilaUtm>(
+      'SELECT anio, mes, utm_valor, fecha_registro FROM utm_historial WHERE anio = ? AND mes = ?',
+      [anio, mes],
+    );
+    return filas.length > 0 ? aUtm(filas[0]!) : null;
+  }
+
+  /** La UTM del mes más reciente que haya guardado, o null si no hay ninguna. */
+  async obtenerUltimaUtmGuardada(): Promise<UtmGuardada | null> {
+    const filas = await this.ejecutor.consultar<FilaUtm>(
+      `SELECT anio, mes, utm_valor, fecha_registro FROM utm_historial
+       ORDER BY anio DESC, mes DESC LIMIT 1`,
+    );
+    return filas.length > 0 ? aUtm(filas[0]!) : null;
+  }
+
+  /**
+   * Factor UTM del pago más reciente que tenga uno, o null.
+   *
+   * El desempate por `id DESC` importa: si hay dos pagos del mismo mes y
+   * año, gana el registrado después. Es el criterio del escritorio
+   * (db_manager.py:367) y omitirlo dejaría el resultado a merced del
+   * orden físico de las filas.
+   */
+  async obtenerUltimoFactorUtm(): Promise<number | null> {
+    const filas = await this.ejecutor.consultar<{ utm_factor: number }>(
+      `SELECT utm_factor FROM pagos WHERE utm_factor IS NOT NULL
+       ORDER BY anio_pago DESC, mes_pago DESC, id DESC LIMIT 1`,
+    );
+    return filas.length > 0 ? filas[0]!.utm_factor : null;
+  }
+}
+
+export class RepositorioConfiguracion {
+  constructor(private readonly ejecutor: EjecutorSql) {}
+
+  async guardarConfiguracion(clave: string, valor: string): Promise<void> {
+    await this.ejecutor.correr(
+      'INSERT OR REPLACE INTO configuracion (clave, valor) VALUES (?, ?)',
+      [clave, valor],
+    );
+  }
+
+  async obtenerConfiguracion(clave: string): Promise<string | null> {
+    const filas = await this.ejecutor.consultar<{ valor: string }>(
+      'SELECT valor FROM configuracion WHERE clave = ?',
+      [clave],
+    );
+    return filas.length > 0 ? filas[0]!.valor : null;
+  }
+}
