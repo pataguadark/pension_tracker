@@ -28,7 +28,7 @@ jobs:
         with:
           node-version: "22"
       - name: Instalar dependencias
-        run: npm install --prefix mobile
+        run: npm ci --prefix mobile
       - name: Verificar tipos
         run: npm run typecheck --prefix mobile
       - name: Tests de TypeScript (incluye fixtures doradas)
