@@ -107,29 +107,50 @@ describe('formatearPesos contra fixtures', () => {
   });
 });
 
-const cuotaPactada = cargar('cuota-pactada.json') as unknown as { casos: Caso[] };
-const desbalanceMensual = cargar('desbalance-mensual.json') as unknown as { casos: Caso[] };
+const cuotaPactada = cargar('cuota-pactada.json');
+const desbalanceMensual = cargar('desbalance-mensual.json');
+
+/**
+ * Convierte las convenciones "NaN"/"Infinity"/"-Infinity" que usan las
+ * fixtures JSON (JSON no tiene literales para estos valores) al number no
+ * finito correspondiente. Los demás valores se retornan sin cambios. Ver
+ * shared/fixtures/README.md.
+ */
+function convertirNoFinito(valor: unknown): number {
+  if (valor === 'NaN') return NaN;
+  if (valor === 'Infinity') return Infinity;
+  if (valor === '-Infinity') return -Infinity;
+  return valor as number;
+}
 
 describe('calcularCuotaPactada contra fixtures', () => {
-  it.each(cuotaPactada.casos)('$nombre', ({ entrada, esperado }) => {
+  it.each(obtenerCasos(cuotaPactada, 'casos'))('$nombre', ({ entrada, esperado }) => {
     const { utmFactor, utmValor } = entrada as { utmFactor: number; utmValor: number };
+    const factor = convertirNoFinito(utmFactor);
+    const valor = convertirNoFinito(utmValor);
     if (esperaError(esperado)) {
-      expect(() => calcularCuotaPactada(utmFactor, utmValor)).toThrow();
+      expect(() => calcularCuotaPactada(factor, valor)).toThrow();
     } else {
-      expect(calcularCuotaPactada(utmFactor, utmValor)).toBeCloseTo(esperado as number, 6);
+      expect(calcularCuotaPactada(factor, valor)).toBeCloseTo(esperado as number, 10);
     }
   });
 });
 
 describe('calcularDesbalanceMensual contra fixtures', () => {
-  it.each(desbalanceMensual.casos)('$nombre', ({ entrada, esperado }) => {
+  it.each(obtenerCasos(desbalanceMensual, 'casos'))('$nombre', ({ entrada, esperado }) => {
     const { montoPagado, cuotaPactada: cuota } = entrada as {
       montoPagado: number;
       cuotaPactada: number;
     };
-    const obtenido = calcularDesbalanceMensual(montoPagado, cuota);
-    const esp = esperado as { diferencia: number; estado: string };
-    expect(obtenido.diferencia).toBeCloseTo(esp.diferencia, 6);
-    expect(obtenido.estado).toBe(esp.estado);
+    const monto = convertirNoFinito(montoPagado);
+    const pactada = convertirNoFinito(cuota);
+    if (esperaError(esperado)) {
+      expect(() => calcularDesbalanceMensual(monto, pactada)).toThrow();
+    } else {
+      const obtenido = calcularDesbalanceMensual(monto, pactada);
+      const esp = esperado as { diferencia: number; estado: string };
+      expect(obtenido.diferencia).toBeCloseTo(esp.diferencia, 10);
+      expect(obtenido.estado).toBe(esp.estado);
+    }
   });
 });

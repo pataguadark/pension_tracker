@@ -1,5 +1,5 @@
 {
-  "descripcion": "cuota_pactada = utm_factor x utm_valor, redondeada a 2 decimales.",
+  "descripcion": "cuota_pactada = utm_factor x utm_valor, redondeada a 2 decimales. Convencion no-finitos: JSON no tiene literal para NaN ni Infinity, asi que esos valores se representan como las cadenas \"NaN\" e \"Infinity\"; cada suite las convierte al numero no finito correspondiente antes de invocar la funcion (ver shared/fixtures/README.md).",
   "casos": [
     { "nombre": "factor entero", "entrada": { "utmFactor": 3, "utmValor": 70000 }, "esperado": 210000 },
     { "nombre": "factor con decimales", "entrada": { "utmFactor": 3.0561, "utmValor": 69889 }, "esperado": 213587.77 },
@@ -9,6 +9,10 @@
     { "nombre": "factor cero", "entrada": { "utmFactor": 0, "utmValor": 70000 }, "esperado": { "error": true } },
     { "nombre": "factor negativo", "entrada": { "utmFactor": -3, "utmValor": 70000 }, "esperado": { "error": true } },
     { "nombre": "utm cero", "entrada": { "utmFactor": 3, "utmValor": 0 }, "esperado": { "error": true } },
-    { "nombre": "utm negativa", "entrada": { "utmFactor": 3, "utmValor": -70000 }, "esperado": { "error": true } }
+    { "nombre": "utm negativa", "entrada": { "utmFactor": 3, "utmValor": -70000 }, "esperado": { "error": true } },
+    { "nombre": "factor NaN", "entrada": { "utmFactor": "NaN", "utmValor": 70000 }, "esperado": { "error": true } },
+    { "nombre": "factor infinito", "entrada": { "utmFactor": "Infinity", "utmValor": 70000 }, "esperado": { "error": true } },
+    { "nombre": "utm NaN", "entrada": { "utmFactor": 3, "utmValor": "NaN" }, "esperado": { "error": true } },
+    { "nombre": "utm infinita", "entrada": { "utmFactor": 3, "utmValor": "Infinity" }, "esperado": { "error": true } }
   ]
 }

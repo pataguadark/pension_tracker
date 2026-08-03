@@ -19,6 +19,8 @@ diferencia se convierte a UNIDADES UTM (a la tasa de ESE mes) y se suman
 en UTM; el total se expresa en pesos a la UTM vigente HOY.
 """
 
+import math
+
 from pensiontracker.database import db_manager
 
 
@@ -37,10 +39,14 @@ def calcular_cuota_pactada(utm_factor: float, utm_valor: float) -> float:
     Retorna:
         float: Monto en pesos (ej: 241130.5)
     """
-    if utm_factor <= 0:
-        raise ValueError("El factor UTM debe ser un número positivo.")
-    if utm_valor <= 0:
-        raise ValueError("El valor de la UTM debe ser un número positivo.")
+    # `not (x > 0)` cubre negativos, cero y NaN (NaN > 0 es False), pero NO
+    # cubre infinito (inf > 0 es True): por eso se exige además
+    # math.isfinite, o un utm_factor/utm_valor infinito pasaría el guard y
+    # produciría una cuota infinita que terminaría persistida en la BD.
+    if not (utm_factor > 0) or not math.isfinite(utm_factor):
+        raise ValueError("El factor UTM debe ser un número positivo y finito.")
+    if not (utm_valor > 0) or not math.isfinite(utm_valor):
+        raise ValueError("El valor de la UTM debe ser un número positivo y finito.")
     return round(utm_factor * utm_valor, 2)
 
 
@@ -60,6 +66,13 @@ def calcular_desbalance_mensual(monto_pagado: float,
             "descripcion": str,    # Texto legible para la UI
         }
     """
+    # Un monto no finito (NaN/inf) no debe etiquetarse silenciosamente como
+    # "DEUDA": eso persistiría basura en la BD como si fuera un desbalance
+    # real. Cero pagado sí es válido (es finito), por eso no se usa `> 0`.
+    if not math.isfinite(monto_pagado) or not math.isfinite(cuota_pactada):
+        raise ValueError(
+            "El monto pagado y la cuota pactada deben ser valores finitos."
+        )
     diferencia = round(monto_pagado - cuota_pactada, 2)
 
     if diferencia > 0:

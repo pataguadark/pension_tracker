@@ -117,22 +117,53 @@ def test_formatters_json_trae_las_claves_esperadas_con_casos(clave):
 
 
 def casos_simples(nombre_archivo: str) -> list:
-    datos = cargar(nombre_archivo)
-    return [(c["nombre"], c["entrada"], c["esperado"]) for c in datos["casos"]]
+    """Casos de un fixture con forma simple {"casos": [...]} (sin sub-bloques
+    por clave, a diferencia de formatters.json). Reutiliza casos() para
+    heredar el mismo guard de "no vacío": así esta forma de fixture queda
+    protegida igual que la de sub-bloques, en vez de leer datos["casos"]
+    directamente y arriesgarse a un "skipped" silencioso si la clave
+    desapareciera o quedara vacía.
+    """
+    return casos(nombre_archivo, "casos")
+
+
+def _convertir_no_finito(valor):
+    """Convierte las convenciones "NaN"/"Infinity"/"-Infinity" que usan las
+    fixtures JSON (JSON no tiene literales para estos valores) al float no
+    finito correspondiente. Los demás valores se retornan sin cambios. Ver
+    shared/fixtures/README.md.
+    """
+    if valor == "NaN":
+        return float("nan")
+    if valor == "Infinity":
+        return float("inf")
+    if valor == "-Infinity":
+        return float("-inf")
+    return valor
 
 
 @pytest.mark.parametrize("nombre,entrada,esperado", casos_simples("cuota-pactada.json"))
 def test_cuota_pactada_contra_fixtures(nombre, entrada, esperado):
+    utm_factor = _convertir_no_finito(entrada["utmFactor"])
+    utm_valor = _convertir_no_finito(entrada["utmValor"])
     if espera_error(esperado):
         with pytest.raises(ValueError):
-            calcular_cuota_pactada(entrada["utmFactor"], entrada["utmValor"])
+            calcular_cuota_pactada(utm_factor, utm_valor)
     else:
-        obtenido = calcular_cuota_pactada(entrada["utmFactor"], entrada["utmValor"])
-        assert obtenido == pytest.approx(esperado)
+        obtenido = calcular_cuota_pactada(utm_factor, utm_valor)
+        assert obtenido == pytest.approx(esperado, abs=TOLERANCIA_ABSOLUTA_PARIDAD_TS)
 
 
 @pytest.mark.parametrize("nombre,entrada,esperado", casos_simples("desbalance-mensual.json"))
 def test_desbalance_mensual_contra_fixtures(nombre, entrada, esperado):
-    obtenido = calcular_desbalance_mensual(entrada["montoPagado"], entrada["cuotaPactada"])
-    assert obtenido["diferencia"] == pytest.approx(esperado["diferencia"])
-    assert obtenido["estado"] == esperado["estado"]
+    monto_pagado = _convertir_no_finito(entrada["montoPagado"])
+    cuota_pactada = _convertir_no_finito(entrada["cuotaPactada"])
+    if espera_error(esperado):
+        with pytest.raises(ValueError):
+            calcular_desbalance_mensual(monto_pagado, cuota_pactada)
+    else:
+        obtenido = calcular_desbalance_mensual(monto_pagado, cuota_pactada)
+        assert obtenido["diferencia"] == pytest.approx(
+            esperado["diferencia"], abs=TOLERANCIA_ABSOLUTA_PARIDAD_TS
+        )
+        assert obtenido["estado"] == esperado["estado"]

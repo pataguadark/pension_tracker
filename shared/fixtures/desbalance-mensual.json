@@ -1,10 +1,14 @@
 {
-  "descripcion": "diferencia = monto_pagado - cuota_pactada, redondeada a 2 decimales. Signo: >0 EXCEDENTE, =0 EXACTO, <0 DEUDA.",
+  "descripcion": "diferencia = monto_pagado - cuota_pactada, redondeada a 2 decimales. Signo: >0 EXCEDENTE, =0 EXACTO, <0 DEUDA. Convencion no-finitos: JSON no tiene literal para NaN ni Infinity, asi que esos valores se representan como las cadenas \"NaN\" e \"Infinity\"; cada suite las convierte al numero no finito correspondiente antes de invocar la funcion (ver shared/fixtures/README.md).",
   "casos": [
     { "nombre": "pago exacto", "entrada": { "montoPagado": 210000, "cuotaPactada": 210000 }, "esperado": { "diferencia": 0, "estado": "EXACTO" } },
     { "nombre": "pago en exceso", "entrada": { "montoPagado": 215000, "cuotaPactada": 210000 }, "esperado": { "diferencia": 5000, "estado": "EXCEDENTE" } },
     { "nombre": "pago deficiente", "entrada": { "montoPagado": 200000, "cuotaPactada": 210000 }, "esperado": { "diferencia": -10000, "estado": "DEUDA" } },
     { "nombre": "diferencia con decimales", "entrada": { "montoPagado": 213588, "cuotaPactada": 213588.75 }, "esperado": { "diferencia": -0.75, "estado": "DEUDA" } },
-    { "nombre": "sin pago", "entrada": { "montoPagado": 0, "cuotaPactada": 210000 }, "esperado": { "diferencia": -210000, "estado": "DEUDA" } }
+    { "nombre": "sin pago", "entrada": { "montoPagado": 0, "cuotaPactada": 210000 }, "esperado": { "diferencia": -210000, "estado": "DEUDA" } },
+    { "nombre": "monto pagado NaN", "entrada": { "montoPagado": "NaN", "cuotaPactada": 210000 }, "esperado": { "error": true } },
+    { "nombre": "monto pagado infinito", "entrada": { "montoPagado": "Infinity", "cuotaPactada": 210000 }, "esperado": { "error": true } },
+    { "nombre": "cuota pactada NaN", "entrada": { "montoPagado": 210000, "cuotaPactada": "NaN" }, "esperado": { "error": true } },
+    { "nombre": "cuota pactada infinita", "entrada": { "montoPagado": 210000, "cuotaPactada": "Infinity" }, "esperado": { "error": true } }
   ]
 }
