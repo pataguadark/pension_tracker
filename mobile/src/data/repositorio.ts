@@ -40,6 +40,13 @@ function aPago(fila: FilaPago): Pago {
 const COLUMNAS_PAGO =
   'id, fecha, mes_pago, anio_pago, utm_valor, cuota_pactada, monto_pagado, desbalance, utm_factor';
 
+export interface ResumenAnual {
+  cantidadPagos: number;
+  totalPagado: number;
+  totalPactado: number;
+  desbalanceAcumulado: number;
+}
+
 export class RepositorioPagos {
   constructor(private readonly ejecutor: EjecutorSql) {}
 
@@ -77,5 +84,71 @@ export class RepositorioPagos {
       [id],
     );
     return filas.length > 0 ? aPago(filas[0]!) : null;
+  }
+
+  /** Reemplaza los datos de un pago. Devuelve false si el id no existe. */
+  async actualizarPago(id: number, pago: Omit<Pago, 'id'>): Promise<boolean> {
+    const r = await this.ejecutor.correr(
+      `UPDATE pagos SET
+         fecha = ?, mes_pago = ?, anio_pago = ?, utm_valor = ?,
+         cuota_pactada = ?, monto_pagado = ?, desbalance = ?, utm_factor = ?
+       WHERE id = ?`,
+      [
+        pago.fecha, pago.mesPago, pago.anioPago, pago.utmValor,
+        pago.cuotaPactada, pago.montoPagado, pago.desbalance,
+        pago.utmFactor ?? null, id,
+      ],
+    );
+    return r.cambios > 0;
+  }
+
+  /** Borra un pago. Devuelve false si el id no existe. */
+  async eliminarPago(id: number): Promise<boolean> {
+    const r = await this.ejecutor.correr('DELETE FROM pagos WHERE id = ?', [id]);
+    return r.cambios > 0;
+  }
+
+  /**
+   * Pagos de un año, de enero a diciembre.
+   *
+   * Orden ascendente a propósito: es el del escritorio
+   * (db_manager.py:190), aunque obtenerTodosLosPagos ordene al revés.
+   * Replicarlo mantiene idéntica la vista anual en ambas plataformas.
+   */
+  async obtenerPagosPorAnio(anio: number): Promise<Pago[]> {
+    const filas = await this.ejecutor.consultar<FilaPago>(
+      `SELECT ${COLUMNAS_PAGO} FROM pagos WHERE anio_pago = ? ORDER BY mes_pago ASC`,
+      [anio],
+    );
+    return filas.map(aPago);
+  }
+
+  /**
+   * Totales de un año.
+   *
+   * SUM() devuelve NULL cuando no hay filas, no 0. Se normaliza acá para
+   * que ninguna capa de arriba tenga que recordarlo.
+   */
+  async obtenerResumenAnual(anio: number): Promise<ResumenAnual> {
+    const filas = await this.ejecutor.consultar<{
+      cantidad_pagos: number;
+      total_pagado: number | null;
+      total_pactado: number | null;
+      desbalance_acumulado: number | null;
+    }>(
+      `SELECT COUNT(*)           AS cantidad_pagos,
+              SUM(monto_pagado)  AS total_pagado,
+              SUM(cuota_pactada) AS total_pactado,
+              SUM(desbalance)    AS desbalance_acumulado
+         FROM pagos WHERE anio_pago = ?`,
+      [anio],
+    );
+    const f = filas[0]!;
+    return {
+      cantidadPagos: f.cantidad_pagos,
+      totalPagado: f.total_pagado ?? 0,
+      totalPactado: f.total_pactado ?? 0,
+      desbalanceAcumulado: f.desbalance_acumulado ?? 0,
+    };
   }
 }
