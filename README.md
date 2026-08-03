@@ -258,7 +258,7 @@ Para recarga automática al guardar, `export PT_DEBUG=1` antes de arrancar (o co
 uv run pytest
 ```
 
-91 tests, aislados por completo de tu base de datos real: cada uno usa una BD SQLite
+121 tests, aislados por completo de tu base de datos real: cada uno usa una BD SQLite
 temporal (`tmp_path`).
 
 ### Construir los binarios
