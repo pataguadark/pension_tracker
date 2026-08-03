@@ -257,8 +257,14 @@ describe('obtenerPagosPorAnio', () => {
     // (db_manager.py:190, `ORDER BY mes_pago ASC`) mientras
     // obtener_todos_los_pagos ordena descendente. Se replica tal cual para
     // que las dos plataformas muestren el historial anual en el mismo orden.
-    await repo.insertarPago({ ...PAGO_BASE, mesPago: 1, anioPago: 2025 });
+    //
+    // Se insertan los meses AL REVÉS (3 antes que 1) a propósito: si se
+    // insertaran en orden ascendente, el orden físico de las filas
+    // coincidiría con el ORDER BY esperado y la prueba pasaría igual sin
+    // ningún ORDER BY -no fijaría nada-. Insertados al revés, quitar el
+    // ORDER BY devolvería [3, 1] (orden físico) en vez de [1, 3].
     await repo.insertarPago({ ...PAGO_BASE, mesPago: 3, anioPago: 2025 });
+    await repo.insertarPago({ ...PAGO_BASE, mesPago: 1, anioPago: 2025 });
     await repo.insertarPago({ ...PAGO_BASE, mesPago: 2, anioPago: 2024 });
     const pagos = await repo.obtenerPagosPorAnio(2025);
     expect(pagos.map((p) => p.mesPago)).toEqual([1, 3]);
@@ -384,10 +390,14 @@ describe('RepositorioUtm', () => {
   });
 
   it('obtenerUltimaUtmGuardada devuelve la del mes más reciente', async () => {
+    // El año más reciente lleva DOS meses a propósito: con uno solo, `mes
+    // ASC` y `mes DESC` devuelven la misma fila y la prueba no fijaría el
+    // desempate por mes -solo el de año-. Con dos, el mes mayor (2) debe
+    // ganar; es de ahí que sale el valor UTM que alimenta la cuota pactada.
     await utm.guardarUtmBulk(2024, new Map([[11, 66000], [12, 66500]]), AHORA);
-    await utm.guardarUtmBulk(2025, new Map([[1, 67294]]), AHORA);
+    await utm.guardarUtmBulk(2025, new Map([[1, 67294], [2, 67429]]), AHORA);
     expect(await utm.obtenerUltimaUtmGuardada()).toEqual({
-      anio: 2025, mes: 1, utmValor: 67294, fechaRegistro: AHORA,
+      anio: 2025, mes: 2, utmValor: 67429, fechaRegistro: AHORA,
     });
   });
 
