@@ -21,7 +21,9 @@ function formatearFactor(input) {
     if (partes.length > 2) {
         // Varios separadores: el último manda, los anteriores eran de miles.
         if (partes[partes.length - 1] === '') {
-            // Separador suelto al final: se ignora, el anterior sigue siendo el decimal.
+            // Separador suelto al final: se ignora y el primero pasa a ser el decimal.
+            // Al teclear nunca hay más de una coma, así que este caso solo se alcanza
+            // pegando texto con varios separadores.
             val = partes[0] + ',' + partes.slice(1).join('');
         } else {
             val = partes.slice(0, -1).join('') + ',' + partes[partes.length - 1];

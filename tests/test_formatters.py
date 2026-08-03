@@ -25,6 +25,7 @@ from pensiontracker.formatters import fmt_factor, limpiar_entero, limpiar_factor
     (".5",     0.5),
     ("3,",     3.0),
     ("  3,5 ", 3.5),
+    ("1.234",  1.234),
 ])
 def test_limpiar_factor_acepta_punto_y_coma(entrada, esperado):
     assert limpiar_factor(entrada) == pytest.approx(esperado)
