@@ -25,13 +25,36 @@ def limpiar_entero(valor: str) -> int:
 def limpiar_factor(valor: str) -> float:
     """
     Convierte texto de factor UTM a float.
-    Acepta coma como separador decimal (formato chileno).
-    Ej: '3,0561' → 3.0561 | '3.0561' → 3.0561 | '3' → 3.0
+
+    Acepta punto o coma como separador decimal: en los teclados decimales
+    de celular el punto suele ser lo único disponible, así que rechazarlo
+    convertiría '3.5' en 35 y decuplicaría la cuota pactada.
+
+    Regla: el último separador presente es el decimal; los anteriores son
+    separadores de miles y se descartan.
+
+    Ej: '3,0561' → 3.0561 | '3.0561' → 3.0561 | '1.234,56' → 1234.56
     """
     if not valor:
         raise ValueError("Valor vacío")
-    limpio = valor.strip().replace(".", "").replace(",", ".")
-    return float(limpio)
+
+    limpio = valor.strip()
+    if not limpio:
+        raise ValueError("Valor vacío")
+
+    corte = max(limpio.rfind("."), limpio.rfind(","))
+    if corte == -1:
+        entero, decimales = limpio, ""
+    else:
+        entero, decimales = limpio[:corte], limpio[corte + 1:]
+
+    entero = entero.replace(".", "").replace(",", "")
+    normalizado = f"{entero}.{decimales}" if decimales else entero
+
+    try:
+        return float(normalizado)
+    except ValueError:
+        raise ValueError(f"Factor UTM inválido: {valor!r}")
 
 
 def fmt_factor(n):
