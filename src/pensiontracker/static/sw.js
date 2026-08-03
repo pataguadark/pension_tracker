@@ -4,7 +4,7 @@
 // historial, etc.) siempre van a red: tienen datos dinámicos del usuario
 // y no deben servirse obsoletas ni offline.
 
-const CACHE_NAME = 'pensiontracker-static-v1';
+const CACHE_NAME = 'pensiontracker-static-v2';
 const ASSETS_TO_CACHE = [
     '/static/style.css',
     '/static/app.js',
