@@ -64,13 +64,13 @@ def calcular_desbalance_mensual(monto_pagado: float,
 
     if diferencia > 0:
         estado = "EXCEDENTE"
-        descripcion = f"Pagó ${diferencia:,.0f} de más este mes."
+        descripcion = f"Pagó {formatear_pesos(diferencia)} de más este mes."
     elif diferencia == 0:
         estado = "EXACTO"
         descripcion = "Pago exacto. Sin diferencia."
     else:
         estado = "DEUDA"
-        descripcion = f"Pagó ${abs(diferencia):,.0f} de menos este mes."
+        descripcion = f"Pagó {formatear_pesos(abs(diferencia))} de menos este mes."
 
     return {
         "diferencia":  diferencia,
@@ -174,7 +174,7 @@ def calcular_desbalance_acumulado() -> dict:
     if total > 0:
         estado = "EXCEDENTE"
         descripcion = (
-            f"En total se han pagado ${total:,.0f} de más "
+            f"En total se han pagado {formatear_pesos(total)} de más "
             f"a lo largo de {cantidad} pago(s)."
         )
     elif total == 0:
@@ -183,7 +183,7 @@ def calcular_desbalance_acumulado() -> dict:
     else:
         estado = "DEUDA"
         descripcion = (
-            f"Existe una deuda acumulada de ${abs(total):,.0f} "
+            f"Existe una deuda acumulada de {formatear_pesos(abs(total))} "
             f"a lo largo de {cantidad} pago(s)."
         )
 

@@ -178,3 +178,20 @@ def test_obtener_historial_desbalances_con_utm_actual_calcula_campos_utm(monkeyp
     assert mes_febrero["desbalance_utm_mes_pesos"] is not None
     assert (mes_febrero["desbalance_utm_mes_pesos"] < 0) == (mes_febrero["desbalance"] < 0)
     assert (mes_enero["desbalance_utm_mes_pesos"] > 0) == (mes_enero["desbalance"] > 0)
+
+
+# -------------------------------------------------------------------
+# Formato de descripción: debe usar separador de miles chileno (punto)
+# -------------------------------------------------------------------
+
+def test_descripcion_mensual_usa_formato_chileno():
+    """El separador de miles debe ser punto: '$5.898', no '$5,898'."""
+    info = calc.calcular_desbalance_mensual(200000, 205898)
+    assert "$5.898" in info["descripcion"]
+    assert "5,898" not in info["descripcion"]
+
+
+def test_descripcion_mensual_excedente_usa_formato_chileno():
+    info = calc.calcular_desbalance_mensual(210000, 204102)
+    assert "$5.898" in info["descripcion"]
+    assert "5,898" not in info["descripcion"]
