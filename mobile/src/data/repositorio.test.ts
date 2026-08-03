@@ -34,6 +34,65 @@ class EjecutorQueFallaAlEscribir implements EjecutorSql {
   }
 }
 
+/**
+ * Imita la restricción real de @capacitor-community/sqlite: cada `run`
+ * (nuestro `correr`) viaja en su propia transacción implícita salvo que ya
+ * haya una transacción explícita abierta, en cuyo caso debe correr DENTRO
+ * de esa transacción sin intentar abrir la suya -el equivalente a pasarle
+ * `transaction: false` al plugin real-. Fija el contrato documentado en
+ * ejecutor.ts: intercepta BEGIN/COMMIT/ROLLBACK en `ejecutar()`, lleva un
+ * flag de "hay una transacción abierta" y lo respeta en `correr()`.
+ *
+ * Sin ese seguimiento (el "mapeo ingenuo" que este archivo previene), cada
+ * `correr()` intentaría su propio BEGIN mientras el de guardarUtmBulk ya
+ * está abierto, y node:sqlite -igual que el plugin real- lo rechaza con
+ * "cannot start a transaction within a transaction". Se verificó
+ * quitando temporalmente el chequeo de `transaccionActiva` en `correr()`:
+ * la prueba de abajo pasó a fallar con exactamente ese mensaje.
+ */
+class EjecutorQueImitaElPluginDeCapacitor implements EjecutorSql {
+  private transaccionActiva = false;
+
+  constructor(private readonly real: EjecutorSql) {}
+
+  async ejecutar(sql: string): Promise<void> {
+    const comando = sql.trim().toUpperCase();
+    if (comando === 'BEGIN') {
+      if (this.transaccionActiva) {
+        throw new Error('cannot start a transaction within a transaction');
+      }
+      this.transaccionActiva = true;
+    } else if (comando === 'COMMIT' || comando === 'ROLLBACK') {
+      this.transaccionActiva = false;
+    }
+    return this.real.ejecutar(sql);
+  }
+
+  async correr(sql: string, params?: unknown[]): Promise<ResultadoEscritura> {
+    // Ya hay una transacción explícita abierta: correr directo, como el
+    // plugin real haría con `transaction: false`.
+    if (this.transaccionActiva) {
+      return this.real.correr(sql, params);
+    }
+    // Sin transacción explícita: cada `run` del plugin abre y cierra la
+    // suya. Se modela igual para que la sentencia individual (guardarUtm
+    // fuera de un lote) siga funcionando.
+    await this.real.ejecutar('BEGIN');
+    try {
+      const r = await this.real.correr(sql, params);
+      await this.real.ejecutar('COMMIT');
+      return r;
+    } catch (error) {
+      await this.real.ejecutar('ROLLBACK');
+      throw error;
+    }
+  }
+
+  async consultar<T>(sql: string, params?: unknown[]): Promise<T[]> {
+    return this.real.consultar<T>(sql, params);
+  }
+}
+
 const AHORA = '2025-06-15 10:30:00';
 
 const PAGO_BASE = {
@@ -293,6 +352,27 @@ describe('RepositorioUtm', () => {
       'SELECT COUNT(*) AS n FROM utm_historial',
     );
     expect(filas[0]!.n).toBe(0);
+  });
+
+  it('guardarUtmBulk funciona contra un ejecutor que rechaza un BEGIN anidado, como el plugin real', async () => {
+    // @capacitor-community/sqlite envuelve cada run/execute en su propia
+    // transacción por defecto. Este ejecutor falso imita esa restricción
+    // (ver su docstring más arriba); si guardarUtmBulk -o el mapeo que
+    // haga un futuro adaptador de Capacitor- disparara un BEGIN anidado,
+    // esta prueba lo detectaría con el mismo error que el plugin real.
+    const ejecutorDelPlugin = new EjecutorQueImitaElPluginDeCapacitor(ejecutor);
+    const utmDelPlugin = new RepositorioUtm(ejecutorDelPlugin);
+
+    await utmDelPlugin.guardarUtmBulk(
+      2025,
+      new Map([[1, 67294], [2, 67429], [3, 68034]]),
+      AHORA,
+    );
+
+    const filas = await ejecutor.consultar<{ n: number }>(
+      'SELECT COUNT(*) AS n FROM utm_historial',
+    );
+    expect(filas[0]!.n).toBe(3);
   });
 
   it('guardarUtmBulk con un mapa vacío no hace nada ni falla', async () => {

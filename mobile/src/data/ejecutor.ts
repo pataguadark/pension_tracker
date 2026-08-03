@@ -15,7 +15,44 @@ export interface ResultadoEscritura {
 }
 
 export interface EjecutorSql {
-  /** Sentencias sin parámetros ni resultados: DDL, PRAGMA, control de transacción. */
+  /**
+   * Sentencias sin parámetros ni resultados: DDL, PRAGMA, control de
+   * transacción (`BEGIN`, `COMMIT`, `ROLLBACK`).
+   *
+   * Contrato para BEGIN/COMMIT/ROLLBACK -obligatorio para cualquier
+   * implementación sobre @capacitor-community/sqlite, no solo para
+   * node:sqlite-:
+   *
+   * Ese plugin ejecuta cada `run`/`execute` dentro de su propia transacción
+   * implícita por defecto. Si `ejecutar()` se limita a reenviar el texto
+   * `"BEGIN"` tal cual (como hace EjecutorNode, porque node:sqlite acepta
+   * BEGIN crudo), un `correr()` posterior -que en el plugin real invoca
+   * `run()`- intenta abrir SU PROPIA transacción por encima de la ya
+   * abierta y el plugin rechaza el anidamiento con
+   * "cannot start a transaction within a transaction": el lote entero
+   * (ver `guardarUtmBulk` en repositorio.ts) no se escribe.
+   *
+   * La interfaz no necesita cambiar para resolverlo. Lo que debe hacer
+   * cualquier implementación de `EjecutorSql` sobre ese plugin:
+   *
+   *   1. Interceptar en `ejecutar()` las sentencias `"BEGIN"`, `"COMMIT"` y
+   *      `"ROLLBACK"` -no reenviarlas como SQL crudo- y traducirlas a las
+   *      llamadas de transacción propias del plugin
+   *      (`beginTransaction()` / `commitTransaction()` /
+   *      `rollbackTransaction()`, o el nombre que use esa versión del
+   *      plugin), llevando internamente un flag de "hay una transacción
+   *      abierta".
+   *   2. Mientras ese flag esté activo, cada `correr()` debe invocar
+   *      `run()` del plugin con `transaction: false`, para que el plugin
+   *      no intente envolver esa sentencia en una transacción propia y
+   *      choque con la ya abierta explícitamente.
+   *
+   * Sin este mapeo, cualquier código que abra una transacción explícita
+   * con `ejecutar('BEGIN')` y después escriba con `correr()` -como
+   * `guardarUtmBulk`- falla en el teléfono aunque pase todas las pruebas
+   * contra node:sqlite. Ver el ejecutor falso en repositorio.test.ts que
+   * fija este contrato imitando esa restricción del plugin real.
+   */
   ejecutar(sql: string): Promise<void>;
 
   /** Escrituras con parámetros: INSERT, UPDATE, DELETE. */
