@@ -10,6 +10,7 @@ import math
 import re
 
 _FACTOR_VALIDO = re.compile(r"^-?\d*\.?\d+$")
+_ENTERO_VALIDO = re.compile(r"^-?[0-9]+$")
 
 
 def limpiar_entero(valor: str) -> int:
@@ -17,6 +18,14 @@ def limpiar_entero(valor: str) -> int:
     Convierte texto formateado en Chile (miles con puntos) a entero.
     Ej: '69.889' → 69889 | '213.588' → 213588 | '1000' → 1000
     Rechaza comas (separador decimal no permitido para enteros).
+
+    int() de Python acepta formas que no son enteros chilenos válidos:
+    signo '+' explícito ('+69889'), guión bajo como separador de dígitos
+    ('1_000') y dígitos Unicode no ASCII (p. ej. arábigo-índicos). El
+    TypeScript ya rechaza las tres con el regex ^-?\\d+$ (donde \\d sin
+    flag /u solo matchea 0-9); acá se exige la misma forma estricta
+    ([0-9] explícito, no \\d, que en un patrón Python sí matchea dígitos
+    Unicode) antes de convertir, para que ambos lados rechacen igual.
     """
     if not valor:
         raise ValueError("Valor vacío")
@@ -24,6 +33,8 @@ def limpiar_entero(valor: str) -> int:
     if "," in limpio:
         raise ValueError("No se permiten decimales en este campo")
     limpio = limpio.replace(".", "")
+    if not _ENTERO_VALIDO.match(limpio):
+        raise ValueError(f"Entero inválido: {valor!r}")
     return int(limpio)
 
 

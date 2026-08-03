@@ -25,7 +25,10 @@
     { "nombre": "sin separador", "entrada": "1000", "esperado": 1000 },
     { "nombre": "con espacios", "entrada": " 200.000 ", "esperado": 200000 },
     { "nombre": "rechaza coma decimal", "entrada": "1,5", "esperado": { "error": true } },
-    { "nombre": "cadena vacia", "entrada": "", "esperado": { "error": true } }
+    { "nombre": "cadena vacia", "entrada": "", "esperado": { "error": true } },
+    { "nombre": "rechaza signo mas explicito", "entrada": "+69889", "esperado": { "error": true } },
+    { "nombre": "rechaza guion bajo como separador de digitos", "entrada": "1_000", "esperado": { "error": true } },
+    { "nombre": "rechaza digitos unicode no ASCII", "entrada": "٦٩٨٨٩", "esperado": { "error": true } }
   ],
   "fmtFactor": [
     { "nombre": "cuatro decimales", "entrada": 3.0561, "esperado": "3,0561" },
