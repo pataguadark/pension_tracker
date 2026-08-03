@@ -18,9 +18,10 @@ la v1 apunta a paridad y no a un mínimo viable.
 
 ### Restricciones
 
-- **Costo cero.** Se distribuye el APK por GitHub Releases. Sin Play Store
-  (US$25, pago único) y sin iOS (US$99/año, obligatorio para generar un `.ipa`
-  distribuible). El criterio es apuntar solo a plataformas sin costo.
+- **Costo cero.** Se distribuye por GitHub Releases y por el repositorio
+  principal de F-Droid, ambos gratuitos. Sin Play Store (US$25, pago único) y
+  sin iOS (US$99/año, obligatorio para generar un `.ipa` distribuible). El
+  criterio es apuntar solo a plataformas sin costo.
 - **La premisa de privacidad no se toca:** los datos siguen viviendo solo en el
   dispositivo. La única petición de red sigue siendo la consulta de la UTM a
   mindicador.cl, que no lleva datos del usuario.
@@ -221,14 +222,44 @@ mención a que no existe.
 
 ## 10. Distribución y firma
 
-APK firmado publicado en GitHub Releases. Costo: **$0**.
+Dos canales, ambos gratuitos:
 
-**El keystore es permanente.** Si se pierde, no se puede publicar una
-actualización que se instale sobre la que ya tienen los usuarios: tendrían que
-desinstalar, y perderían sus datos si no exportaron antes. Va cifrado en GitHub
-Secrets para el CI, y **debe existir una copia fuera del repositorio**, en un
-gestor de contraseñas o equivalente. Es el archivo más importante del proyecto
-después del código.
+1. **GitHub Releases** — APK firmado con el keystore del proyecto.
+2. **Repositorio principal de F-Droid** — mayor difusión.
+
+### El keystore es permanente
+
+Si se pierde, no se puede publicar una actualización que se instale sobre la que
+ya tienen los usuarios: tendrían que desinstalar, y perderían sus datos si no
+exportaron antes. Va cifrado en GitHub Secrets para el CI, y **debe existir una
+copia fuera del repositorio**, en un gestor de contraseñas o equivalente. Es el
+archivo más importante del proyecto después del código.
+
+### F-Droid
+
+El proyecto califica: licencia MIT, sin analítica, sin Google Play Services ni
+Firebase — todo lo que su política de inclusión prohíbe es precisamente lo que
+esta app no tiene. F-Droid **compila desde el código fuente**; no se le entrega
+un APK ya construido.
+
+**Consecuencia de las dos firmas.** F-Droid firma con su propia llave. Android
+se niega a actualizar una app si la firma cambia, así que el APK de F-Droid y el
+de GitHub Releases **no son intercambiables**: para pasar de un canal al otro hay
+que desinstalar, lo que borra los datos.
+
+Mitigación: documentar que el usuario elija un canal y se quede en él, y que
+migrar exige **exportar el respaldo antes de desinstalar** y restaurarlo después.
+El importador de la sección 7 es exactamente esa vía de escape, lo que refuerza
+que se construya en la v1 y no después.
+
+*Alternativa evaluada y descartada por ahora:* builds reproducibles, que
+permitirían a F-Droid publicar el APK firmado por el proyecto y dejar ambos
+canales intercambiables. Lograr reproducibilidad sobre npm + Gradle es difícil y
+sin garantía de éxito; queda como mejora posterior, no como bloqueante.
+
+**Secuencia.** F-Droid no puede ser el primer paso: exige un release etiquetado y
+funcional desde el cual construir, y su proceso de revisión toma semanas. Se
+envía **después** de que el APK esté publicado y verificado en GitHub Releases.
 
 ---
 
@@ -244,3 +275,9 @@ después del código.
 5. Un archivo inválido se rechaza sin alterar los datos existentes.
 6. La app funciona sin red, salvo por el valor de la UTM.
 7. Sin peticiones de red fuera de mindicador.cl.
+8. La compilación no depende de Google Play Services, Firebase ni de ninguna
+   biblioteca privativa, y la cadena de construcción es enteramente libre —
+   requisito de la política de inclusión de F-Droid.
+9. El README explica los dos canales de instalación, que no son intercambiables
+   por la diferencia de firma, y cómo migrar exportando el respaldo antes de
+   desinstalar.
