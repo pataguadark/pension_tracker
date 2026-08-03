@@ -1,0 +1,35 @@
+name: Tests
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch: {}
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Instalar uv
+        uses: astral-sh/setup-uv@v3
+      - name: Instalar Python
+        run: uv python install 3.12
+      - name: Instalar dependencias
+        run: uv sync
+      - name: Tests de Python (incluye fixtures doradas)
+        run: uv run pytest -q
+
+  typescript:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Instalar dependencias
+        run: npm install --prefix mobile
+      - name: Verificar tipos
+        run: npm run typecheck --prefix mobile
+      - name: Tests de TypeScript (incluye fixtures doradas)
+        run: npm test --prefix mobile
