@@ -25,13 +25,45 @@ def cargar(nombre: str) -> dict:
 
 
 def casos(nombre_archivo: str, clave: str) -> list:
-    """Retorna los casos como tuplas (nombre, entrada, esperado) para parametrizar."""
+    """Retorna los casos como tuplas (nombre, entrada, esperado) para parametrizar.
+
+    Comprobación explícita de no-vacío: si `clave` no existe en el archivo o su
+    lista de casos quedó vacía (p. ej. por una clave mal escrita al agregar un
+    fixture nuevo), `pytest.mark.parametrize` con una lista vacía NO hace
+    fallar el test correspondiente: pytest lo marca "skipped" y la suite queda
+    en verde sin haber verificado nada. Es exactamente el modo de falla
+    silenciosa que este mecanismo de paridad existe para evitar, así que se
+    valida aquí mismo, en el punto donde se cargan los casos, y se lanza un
+    error de colección con mensaje claro en vez de dejar pasar un "skip" mudo.
+    """
     datos = cargar(nombre_archivo)
-    return [(c["nombre"], c["entrada"], c["esperado"]) for c in datos[clave]]
+    bloque = datos.get(clave)
+    if not bloque:
+        raise ValueError(
+            f'El bloque de fixtures "{clave}" no existe o está vacío en '
+            f"{nombre_archivo}. Revisa que la clave esté bien escrita y que "
+            "tenga al menos un caso; de lo contrario esta suite dejaría de "
+            "cubrir esos casos sin que nadie lo note."
+        )
+    return [(c["nombre"], c["entrada"], c["esperado"]) for c in bloque]
 
 
 def espera_error(esperado) -> bool:
     return isinstance(esperado, dict) and esperado.get("error") is True
+
+
+# El lado TypeScript compara con toBeCloseTo(esperado, 10), cuya tolerancia
+# es absoluta: |actual - esperado| < 0.5 * 10**-10 = 5e-11. pytest.approx, si
+# no se le fija nada, usa una tolerancia RELATIVA por defecto (rel=1e-6), mucho
+# mas laxa. Con esa laxitud, una divergencia entre las dos implementaciones de
+# entre 1e-4 y 1e-6 haria fallar vitest pero pasaria inadvertida aqui: el
+# mecanismo de paridad detectaria mejor en una direccion que en la otra, lo
+# cual es peor que no tener el mecanismo (da falsa confianza).
+#
+# Fijamos abs=5e-11 (y ningun rel) para igualar exactamente la sensibilidad
+# de toBeCloseTo(esperado, 10). No aflojar este valor: hacerlo rompe la
+# simetria entre ambas suites y reabre el punto ciego descrito arriba.
+TOLERANCIA_ABSOLUTA_PARIDAD_TS = 5e-11
 
 
 @pytest.mark.parametrize("nombre,entrada,esperado", casos("formatters.json", "limpiarFactor"))
@@ -40,7 +72,9 @@ def test_limpiar_factor_contra_fixtures(nombre, entrada, esperado):
         with pytest.raises(ValueError):
             limpiar_factor(entrada)
     else:
-        assert limpiar_factor(entrada) == pytest.approx(esperado)
+        assert limpiar_factor(entrada) == pytest.approx(
+            esperado, abs=TOLERANCIA_ABSOLUTA_PARIDAD_TS
+        )
 
 
 @pytest.mark.parametrize("nombre,entrada,esperado", casos("formatters.json", "limpiarEntero"))
@@ -60,3 +94,19 @@ def test_fmt_factor_contra_fixtures(nombre, entrada, esperado):
 @pytest.mark.parametrize("nombre,entrada,esperado", casos("formatters.json", "formatearPesos"))
 def test_formatear_pesos_contra_fixtures(nombre, entrada, esperado):
     assert formatear_pesos(entrada) == esperado
+
+
+# Claves que formatters.json debe tener, cada una con al menos un caso. Si
+# alguien renombra una clave (o la vacía), este test se pone rojo con un
+# mensaje explícito en vez de que la suite se quede sin cobertura en silencio.
+CLAVES_ESPERADAS_FORMATTERS = ("limpiarFactor", "limpiarEntero", "fmtFactor", "formatearPesos")
+
+
+@pytest.mark.parametrize("clave", CLAVES_ESPERADAS_FORMATTERS)
+def test_formatters_json_trae_las_claves_esperadas_con_casos(clave):
+    datos = cargar("formatters.json")
+    assert clave in datos, f'Falta la clave "{clave}" en shared/fixtures/formatters.json'
+    assert isinstance(
+        datos[clave], list
+    ), f'La clave "{clave}" en formatters.json debería ser una lista de casos'
+    assert len(datos[clave]) > 0, f'El bloque "{clave}" en formatters.json está vacío'
