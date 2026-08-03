@@ -119,3 +119,98 @@ export function calcularDesbalanceAcumuladoUtm(
     estado: estadoDe(totalUtm),
   };
 }
+
+export interface FilaHistorial extends Pago {
+  desbalanceCorrido: number;
+  estadoCorrido: Estado;
+  desbalanceUtmMesPesos: number | null;
+  desbalanceUtmCorridoPesos: number | null;
+  estadoUtmMes: Estado | null;
+  estadoUtmCorrido: Estado | null;
+}
+
+/**
+ * Enriquece los pagos con el desbalance acumulado corrido mes a mes,
+ * en pesos históricos y en UTM convertida a pesos de hoy.
+ *
+ * Acumula del más antiguo al más reciente y retorna del más reciente al
+ * más antiguo, que es el orden en que la interfaz los muestra.
+ */
+export function obtenerHistorialDesbalances(
+  pagos: Pago[],
+  utmValorActual: number | null = null,
+): FilaHistorial[] {
+  const ordenados = [...pagos].sort(
+    (a, b) => a.anioPago - b.anioPago || a.mesPago - b.mesPago,
+  );
+
+  let acumuladoCorrido = 0;
+  let acumuladoUtmCorrido = 0;
+  const historial: FilaHistorial[] = [];
+
+  for (const pago of ordenados) {
+    acumuladoCorrido = redondear(acumuladoCorrido + pago.desbalance, 2);
+
+    const diffUtm = calcularDesbalanceUtmMensual(pago);
+    if (diffUtm !== null) {
+      acumuladoUtmCorrido += diffUtm;
+    }
+
+    const fila: FilaHistorial = {
+      ...pago,
+      desbalanceCorrido: acumuladoCorrido,
+      estadoCorrido: estadoDe(acumuladoCorrido),
+      desbalanceUtmMesPesos: null,
+      desbalanceUtmCorridoPesos: null,
+      estadoUtmMes: null,
+      estadoUtmCorrido: null,
+    };
+
+    if (diffUtm !== null && utmValorActual) {
+      const mesPesos = redondear(diffUtm * utmValorActual, 2);
+      const corridoPesos = redondear(acumuladoUtmCorrido * utmValorActual, 2);
+      fila.desbalanceUtmMesPesos = mesPesos;
+      fila.desbalanceUtmCorridoPesos = corridoPesos;
+      fila.estadoUtmMes = estadoDe(mesPesos);
+      fila.estadoUtmCorrido = estadoDe(corridoPesos);
+    }
+
+    historial.push(fila);
+  }
+
+  return historial.reverse();
+}
+
+/** Totales y desbalance acumulado del conjunto de pagos. */
+export function resumirEstadoCuenta(pagos: Pago[]): {
+  cantidadPagos: number;
+  totalPagado: number;
+  totalPactado: number;
+  desbalanceAcumulado: number;
+  estado: Estado;
+} {
+  if (pagos.length === 0) {
+    return {
+      cantidadPagos: 0,
+      totalPagado: 0,
+      totalPactado: 0,
+      desbalanceAcumulado: 0,
+      estado: 'EXACTO',
+    };
+  }
+
+  const totalPagado = redondear(
+    pagos.reduce((suma, p) => suma + p.montoPagado, 0), 2);
+  const totalPactado = redondear(
+    pagos.reduce((suma, p) => suma + p.cuotaPactada, 0), 2);
+  const desbalanceAcumulado = redondear(
+    pagos.reduce((suma, p) => suma + p.desbalance, 0), 2);
+
+  return {
+    cantidadPagos: pagos.length,
+    totalPagado,
+    totalPactado,
+    desbalanceAcumulado,
+    estado: estadoDe(desbalanceAcumulado),
+  };
+}

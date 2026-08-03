@@ -15,6 +15,8 @@ import {
   calcularDesbalanceAcumuladoUtm,
   calcularDesbalanceMensual,
   calcularDesbalanceUtmMensual,
+  obtenerHistorialDesbalances,
+  resumirEstadoCuenta,
 } from './calculos';
 import { fmtFactor, formatearPesos, limpiarEntero, limpiarFactor } from './formatters';
 import type { Pago } from './tipos';
@@ -218,5 +220,69 @@ describe('calcularDesbalanceAcumuladoUtm contra fixtures', () => {
     } else {
       expect(obtenido.desbalanceAjustado).toBeCloseTo(esp.desbalanceAjustado, 10);
     }
+  });
+});
+
+const historialCorrido = cargar('historial-corrido.json');
+
+interface FilaEsperada {
+  mesPago: number;
+  desbalanceCorrido: number;
+  estadoCorrido: string;
+  desbalanceUtmMesPesos: number | null;
+  desbalanceUtmCorridoPesos: number | null;
+  estadoUtmMes: string | null;
+  estadoUtmCorrido: string | null;
+}
+
+describe('obtenerHistorialDesbalances contra fixtures', () => {
+  it.each(obtenerCasos(historialCorrido, 'historial'))('$nombre', ({ entrada, esperado }) => {
+    const { utmValorActual, pagos } = entrada as {
+      utmValorActual: number | null;
+      pagos: Pago[];
+    };
+    const obtenido = obtenerHistorialDesbalances(pagos, utmValorActual);
+    const filas = esperado as unknown as FilaEsperada[];
+
+    expect(obtenido).toHaveLength(filas.length);
+
+    filas.forEach((esp, i) => {
+      const fila = obtenido[i]!;
+      // El orden importa: se espera del más reciente al más antiguo.
+      expect(fila.mesPago).toBe(esp.mesPago);
+      expect(fila.desbalanceCorrido).toBeCloseTo(esp.desbalanceCorrido, 10);
+      expect(fila.estadoCorrido).toBe(esp.estadoCorrido);
+      expect(fila.estadoUtmMes).toBe(esp.estadoUtmMes);
+      expect(fila.estadoUtmCorrido).toBe(esp.estadoUtmCorrido);
+
+      if (esp.desbalanceUtmMesPesos === null) {
+        expect(fila.desbalanceUtmMesPesos).toBeNull();
+        expect(fila.desbalanceUtmCorridoPesos).toBeNull();
+      } else {
+        expect(fila.desbalanceUtmMesPesos).toBeCloseTo(esp.desbalanceUtmMesPesos, 10);
+        expect(fila.desbalanceUtmCorridoPesos).toBeCloseTo(
+          esp.desbalanceUtmCorridoPesos as number, 10);
+      }
+    });
+  });
+});
+
+describe('resumirEstadoCuenta contra fixtures', () => {
+  it.each(obtenerCasos(historialCorrido, 'resumen'))('$nombre', ({ entrada, esperado }) => {
+    const { pagos } = entrada as { pagos: Pago[] };
+    const obtenido = resumirEstadoCuenta(pagos);
+    const esp = esperado as {
+      cantidadPagos: number;
+      totalPagado: number;
+      totalPactado: number;
+      desbalanceAcumulado: number;
+      estado: string;
+    };
+
+    expect(obtenido.cantidadPagos).toBe(esp.cantidadPagos);
+    expect(obtenido.totalPagado).toBeCloseTo(esp.totalPagado, 10);
+    expect(obtenido.totalPactado).toBeCloseTo(esp.totalPactado, 10);
+    expect(obtenido.desbalanceAcumulado).toBeCloseTo(esp.desbalanceAcumulado, 10);
+    expect(obtenido.estado).toBe(esp.estado);
   });
 });

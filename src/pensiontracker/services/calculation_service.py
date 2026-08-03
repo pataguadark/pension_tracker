@@ -377,7 +377,8 @@ def formatear_pesos(monto: float) -> str:
     return f"${monto:,.0f}".replace(",", ".")
 
 
-def obtener_historial_desbalances(utm_valor_actual: float | None = None) -> list:
+def obtener_historial_desbalances(utm_valor_actual: float | None = None,
+                                  pagos: list | None = None) -> list:
     """
     Retorna lista de pagos enriquecida con el desbalance acumulado
     corrido mes a mes (útil para graficar la evolución de la deuda),
@@ -389,9 +390,16 @@ def obtener_historial_desbalances(utm_valor_actual: float | None = None) -> list
     'desbalance_utm_mes_pesos'/'desbalance_utm_corrido_pesos' (y sus
     estados); si es None, esos campos quedan en None (sin UTM de
     referencia no se puede expresar el ajuste en pesos).
+
+    Si `pagos` es None (uso normal desde la app), se consultan todos los
+    pagos de la base de datos; mismo patrón que
+    calcular_desbalance_acumulado_utm, para poder alimentar la función con
+    fixtures en los tests sin montar una base de datos.
     """
+    if pagos is None:
+        pagos = db_manager.obtener_todos_los_pagos()
+
     # Obtenemos pagos del más antiguo al más reciente para acumular
-    pagos = db_manager.obtener_todos_los_pagos()
     pagos_ordenados = sorted(
         pagos,
         key=lambda p: (p["anio_pago"], p["mes_pago"])

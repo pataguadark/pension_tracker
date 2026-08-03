@@ -21,6 +21,7 @@ from pensiontracker.services.calculation_service import (
     calcular_desbalance_mensual,
     calcular_desbalance_utm_mensual,
     formatear_pesos,
+    obtener_historial_desbalances,
 )
 
 FIXTURES = Path(__file__).resolve().parent.parent / "shared" / "fixtures"
@@ -230,3 +231,77 @@ def test_desbalance_acumulado_utm_contra_fixtures(nombre, entrada, esperado):
         assert obtenido["desbalance_ajustado"] == pytest.approx(
             esperado["desbalanceAjustado"], abs=TOLERANCIA_ABSOLUTA_PARIDAD_TS
         )
+
+
+# Claves de cada fila del historial corrido, en snake_case (Python) mapeadas
+# a camelCase (fixture JSON). Reutiliza la misma transformación snake→camel
+# en vez de mantener un segundo mapa manual como MAPA_CLAVES.
+CLAVES_FILA = (
+    "desbalance_corrido",
+    "estado_corrido",
+    "desbalance_utm_mes_pesos",
+    "desbalance_utm_corrido_pesos",
+    "estado_utm_mes",
+    "estado_utm_corrido",
+)
+
+
+@pytest.mark.parametrize("nombre,entrada,esperado", casos("historial-corrido.json", "historial"))
+def test_historial_corrido_contra_fixtures(nombre, entrada, esperado):
+    pagos = [a_snake(p) for p in entrada["pagos"]]
+    obtenido = obtener_historial_desbalances(entrada["utmValorActual"], pagos)
+
+    assert len(obtenido) == len(esperado)
+
+    for fila, esp in zip(obtenido, esperado):
+        # El orden importa: la fixture espera del más reciente al más antiguo.
+        assert fila["mes_pago"] == esp["mesPago"]
+        for clave_py in CLAVES_FILA:
+            clave_json = "".join(
+                parte if i == 0 else parte.capitalize()
+                for i, parte in enumerate(clave_py.split("_"))
+            )
+            valor, valor_esp = fila[clave_py], esp[clave_json]
+            if valor_esp is None:
+                assert valor is None, f"{nombre}: {clave_py} debería ser None"
+            elif isinstance(valor_esp, str):
+                assert valor == valor_esp, f"{nombre}: {clave_py}"
+            else:
+                assert valor == pytest.approx(
+                    valor_esp, abs=TOLERANCIA_ABSOLUTA_PARIDAD_TS
+                ), f"{nombre}: {clave_py}"
+
+
+@pytest.mark.parametrize("nombre,entrada,esperado", casos("historial-corrido.json", "resumen"))
+def test_resumen_estado_cuenta_contra_fixtures(nombre, entrada, esperado):
+    """El resumen del Python vive en obtener_estado_cuenta(), que consulta la BD.
+    Se replica acá la aritmética que esa función aplica sobre la lista de pagos."""
+    pagos = [a_snake(p) for p in entrada["pagos"]]
+
+    if not pagos:
+        obtenido = {
+            "cantidadPagos": 0, "totalPagado": 0.0, "totalPactado": 0.0,
+            "desbalanceAcumulado": 0.0, "estado": "EXACTO",
+        }
+    else:
+        desbalance = round(sum(p["desbalance"] for p in pagos), 2)
+        obtenido = {
+            "cantidadPagos": len(pagos),
+            "totalPagado": round(sum(p["monto_pagado"] for p in pagos), 2),
+            "totalPactado": round(sum(p["cuota_pactada"] for p in pagos), 2),
+            "desbalanceAcumulado": desbalance,
+            "estado": ("EXCEDENTE" if desbalance > 0
+                       else "DEUDA" if desbalance < 0 else "EXACTO"),
+        }
+
+    assert obtenido["cantidadPagos"] == esperado["cantidadPagos"]
+    assert obtenido["totalPagado"] == pytest.approx(
+        esperado["totalPagado"], abs=TOLERANCIA_ABSOLUTA_PARIDAD_TS
+    )
+    assert obtenido["totalPactado"] == pytest.approx(
+        esperado["totalPactado"], abs=TOLERANCIA_ABSOLUTA_PARIDAD_TS
+    )
+    assert obtenido["desbalanceAcumulado"] == pytest.approx(
+        esperado["desbalanceAcumulado"], abs=TOLERANCIA_ABSOLUTA_PARIDAD_TS
+    )
+    assert obtenido["estado"] == esperado["estado"]
