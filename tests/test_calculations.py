@@ -195,3 +195,27 @@ def test_descripcion_mensual_excedente_usa_formato_chileno():
     info = calc.calcular_desbalance_mensual(210000, 204102)
     assert "$5.898" in info["descripcion"]
     assert "5,898" not in info["descripcion"]
+
+
+def test_descripcion_acumulado_excedente_usa_formato_chileno(monkeypatch):
+    """calcular_desbalance_acumulado (rama EXCEDENTE) debe usar punto de miles."""
+    pagos = [{"desbalance": 15898}]
+    monkeypatch.setattr(calc.db_manager, "obtener_todos_los_pagos", lambda: pagos)
+
+    resultado = calc.calcular_desbalance_acumulado()
+
+    assert resultado["estado"] == "EXCEDENTE"
+    assert "$15.898" in resultado["descripcion"]
+    assert "15,898" not in resultado["descripcion"]
+
+
+def test_descripcion_acumulado_deuda_usa_formato_chileno(monkeypatch):
+    """calcular_desbalance_acumulado (rama DEUDA) debe usar punto de miles."""
+    pagos = [{"desbalance": -15898}]
+    monkeypatch.setattr(calc.db_manager, "obtener_todos_los_pagos", lambda: pagos)
+
+    resultado = calc.calcular_desbalance_acumulado()
+
+    assert resultado["estado"] == "DEUDA"
+    assert "$15.898" in resultado["descripcion"]
+    assert "15,898" not in resultado["descripcion"]
