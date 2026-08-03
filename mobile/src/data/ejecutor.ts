@@ -24,3 +24,20 @@ export interface EjecutorSql {
   /** Lecturas: SELECT. */
   consultar<T>(sql: string, params?: unknown[]): Promise<T[]>;
 }
+
+/**
+ * Indica si una sentencia es un INSERT (incluye "INSERT INTO",
+ * "INSERT OR REPLACE", "INSERT OR IGNORE", etc.).
+ *
+ * Existe para que cada implementación de `EjecutorSql` pueda calcular
+ * `ultimoId` sin apoyarse en un detalle propio de su motor: ni node:sqlite
+ * ni @capacitor-community/sqlite marcan de forma explícita "esta sentencia
+ * no insertó nada" -devuelven el id de la última fila insertada en la
+ * conexión, que persiste entre sentencias-, así que el criterio se arma con
+ * lo único que cualquier motor entrega: el texto de la sentencia y las
+ * filas que afectó (`cambios`). Solo un INSERT que de verdad afectó una
+ * fila puede haber insertado una fila nueva.
+ */
+export function esSentenciaInsert(sql: string): boolean {
+  return /^\s*insert\b/i.test(sql);
+}

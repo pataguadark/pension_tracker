@@ -9,7 +9,7 @@
 
 import { createRequire } from 'node:module';
 
-import type { EjecutorSql, ResultadoEscritura } from './ejecutor';
+import { esSentenciaInsert, type EjecutorSql, type ResultadoEscritura } from './ejecutor';
 import type { DatabaseSync as DatabaseSyncType } from 'node:sqlite';
 
 // `node:sqlite` se carga con require() y no con un `import` estático a
@@ -37,10 +37,15 @@ export class EjecutorNode implements EjecutorSql {
 
   async correr(sql: string, params: unknown[] = []): Promise<ResultadoEscritura> {
     const r = this.bd.prepare(sql).run(...(params as never[]));
-    return {
-      cambios: Number(r.changes),
-      ultimoId: r.lastInsertRowid === undefined ? null : Number(r.lastInsertRowid),
-    };
+    const cambios = Number(r.changes);
+    // node:sqlite nunca deja `lastInsertRowid` en `undefined`: entrega 0 o
+    // el id de la última fila insertada en esta conexión, que persiste
+    // entre sentencias. Un UPDATE/DELETE que no inserta nada "heredaría" así
+    // el id de un INSERT anterior si se lo tomara tal cual. Por eso solo se
+    // reporta `ultimoId` cuando la sentencia era un INSERT y de verdad
+    // afectó una fila (ver `esSentenciaInsert` en ejecutor.ts).
+    const ultimoId = esSentenciaInsert(sql) && cambios > 0 ? Number(r.lastInsertRowid) : null;
+    return { cambios, ultimoId };
   }
 
   async consultar<T>(sql: string, params: unknown[] = []): Promise<T[]> {

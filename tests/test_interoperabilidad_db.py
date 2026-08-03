@@ -27,7 +27,16 @@ MOBILE = RAIZ / "mobile"
 
 
 def estructura(ruta_db: Path) -> dict:
-    """Tablas y columnas de una base, en forma comparable entre plataformas."""
+    """Tablas y columnas de una base, en forma comparable entre plataformas.
+
+    Por columna se compara nombre, tipo declarado y si admite NULL: `c[1]`
+    (name), `c[2]` (type) y `c[3]` (notnull) de `PRAGMA table_info`. No se
+    compara el texto crudo del CREATE TABLE (ver docstring del módulo), así
+    que una columna agregada con ALTER TABLE (como `utm_factor` en el
+    escritorio) es equivalente a una declarada inline con el mismo tipo y
+    la misma nulabilidad: es justamente el caso que este archivo necesita
+    tratar como compatible.
+    """
     conn = sqlite3.connect(ruta_db)
     try:
         tablas = [
@@ -38,7 +47,10 @@ def estructura(ruta_db: Path) -> dict:
             )
         ]
         return {
-            tabla: [c[1] for c in conn.execute(f"PRAGMA table_info('{tabla}')")]
+            tabla: [
+                (c[1], c[2].upper(), bool(c[3]))
+                for c in conn.execute(f"PRAGMA table_info('{tabla}')")
+            ]
             for tabla in tablas
         }
     finally:
@@ -108,4 +120,5 @@ def test_el_escritorio_no_migra_una_base_del_movil(db_del_movil, monkeypatch):
     monkeypatch.setattr(db_manager, "DB_PATH", db_del_movil)
     db_manager.inicializar_db()
     columnas = estructura(db_del_movil)["pagos"]
-    assert columnas.count("utm_factor") == 1
+    nombres = [c[0] for c in columnas]
+    assert nombres.count("utm_factor") == 1
