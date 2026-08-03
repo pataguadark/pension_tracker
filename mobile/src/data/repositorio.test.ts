@@ -339,6 +339,16 @@ describe('obtenerResumenAnual', () => {
       ...PAGO_BASE, mesPago: 2, montoPagado: 210000,
       cuotaPactada: 204102.0, desbalance: 5898.0,
     });
+    // Pago de un año POSTERIOR a 2025. No debe sumarse al resumen de 2025:
+    // el filtro es `anio_pago = ?`. Se elige un año posterior -no
+    // anterior- a propósito: un mutante que cambiara el operador a `>=`
+    // colaría este pago (2026 >= 2025 es cierto) pero uno de un año
+    // anterior no lo haría (2024 >= 2025 es falso), así que solo un año
+    // posterior delata ese mutante concreto.
+    await repo.insertarPago({
+      ...PAGO_BASE, mesPago: 6, anioPago: 2026, montoPagado: 999999,
+      cuotaPactada: 999999.0, desbalance: 0,
+    });
     expect(await repo.obtenerResumenAnual(2025)).toEqual({
       cantidadPagos: 2,
       totalPagado: 410000,

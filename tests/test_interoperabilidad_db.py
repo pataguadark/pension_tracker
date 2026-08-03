@@ -287,6 +287,50 @@ def test_el_movil_migra_una_base_legacy_del_escritorio(tmp_path, monkeypatch):
     assert pagos[0]["utm_factor"] is None
 
 
+def test_la_migracion_del_movil_da_la_misma_estructura_que_la_del_escritorio(
+    tmp_path, monkeypatch,
+):
+    """El ALTER TABLE que migra bases legacy debe declarar el mismo tipo en
+    ambas plataformas, no solo el mismo nombre de columna.
+
+    Las otras dos pruebas de este archivo no fijan esto:
+    `test_ambas_plataformas_crean_la_misma_estructura` compara bases
+    frescas, que usan el CREATE TABLE inline y nunca pasan por el ALTER;
+    `test_el_movil_migra_una_base_legacy_del_escritorio` solo comprueba que
+    el nombre `utm_factor` esté presente, no su tipo declarado. Un ALTER
+    TABLE pagos ADD COLUMN utm_factor TEXT (en vez de REAL) pasaría ambas
+    pruebas sin que ninguna se diera cuenta, y dejaría al escritorio
+    leyendo el factor como cadena: '3.0561' * 68785 no lanza excepción en
+    Python, repite la cadena, y la cuota calculada es una aberración de
+    decenas de miles de caracteres.
+
+    Acá se migra la MISMA base legacy con cada plataforma -una copia por
+    cada una, para no compartir el archivo- y se compara la estructura
+    completa (nombre, tipo y nulabilidad de cada columna) del resultado.
+    """
+    ruta_escritorio = tmp_path / "legacy_escritorio.db"
+    ruta_movil = tmp_path / "legacy_movil.db"
+    _crear_base_legacy_del_escritorio(ruta_escritorio)
+    _crear_base_legacy_del_escritorio(ruta_movil)
+
+    monkeypatch.setattr(db_manager, "DB_PATH", ruta_escritorio)
+    db_manager.inicializar_db()
+
+    resultado = _correr_script_movil(ruta_movil, (
+        "import { EjecutorNode } from './src/data/ejecutor-node.ts';\n"
+        "import { inicializarBd } from './src/data/esquema.ts';\n"
+        f"const e = new EjecutorNode({json.dumps(str(ruta_movil))});\n"
+        "await inicializarBd(e);\n"
+        "e.cerrar();\n"
+    ))
+    assert resultado.returncode == 0, (
+        f"inicializarBd falló sobre una base legacy:\n"
+        f"{resultado.stdout}\n{resultado.stderr}"
+    )
+
+    assert estructura(ruta_movil) == estructura(ruta_escritorio)
+
+
 def test_el_movil_migra_una_base_legacy_de_forma_idempotente(tmp_path):
     """Correr inicializarBd dos veces sobre una base legacy no debe fallar
     ni duplicar la columna utm_factor."""
