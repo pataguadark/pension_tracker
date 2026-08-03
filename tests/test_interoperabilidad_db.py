@@ -391,6 +391,18 @@ PAGOS_SINTETICOS = [
     (3, 2025, 68034, 204101.495, 210000, 5898.505, 3.0),
     (11, 2024, 66000, 198000.005, 198000, -0.005, 3.0),  # año distinto: cubre el orden
     (4, 2025, 68350, 205000.123, 205000, -0.123, 3.0),
+    #
+    # Hallazgo 5 de la revisión final: el redondeo de `totalPagado` en
+    # resumirEstadoCuenta() no estaba fijado por estas pruebas -todos los
+    # monto_pagado de arriba son pesos enteros-, mientras que el de
+    # `totalPactado` sí lo estaba (cuota_pactada siempre lleva milésimos
+    # acá). Se verificó quitando el redondeo de `totalPagado` en
+    # calculos.ts: con solo las cinco filas de arriba, la prueba de
+    # cálculos seguía pasando -el mutante no se detectaba-. Esta fila le da
+    # milésimos a monto_pagado (200000.006, no un peso redondo) para que
+    # la suma cruda y la redondeada difieran en más de
+    # TOLERANCIA_ABSOLUTA_PARIDAD_TS y el mutante quede cubierto.
+    (5, 2025, 68785, 206355.0, 200000.006, -6354.994, 3.0),
 ]
 
 

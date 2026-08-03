@@ -5,6 +5,53 @@ import { inicializarBd } from './esquema';
 import { RepositorioConfiguracion, RepositorioPagos, RepositorioUtm } from './repositorio';
 
 /**
+ * Delega en un EjecutorNode real, pero cuenta cuántas veces se invocó
+ * cada método. Sirve para fijar que guardarUtmBulk con un mapa vacío no
+ * toca el ejecutor en absoluto -ni siquiera para abrir y cerrar una
+ * transacción vacía-, en vez de solo comprobar que la tabla queda sin
+ * filas (eso último pasaba igual con o sin la guarda de mapa vacío,
+ * porque un BEGIN seguido de un COMMIT sin escrituras de por medio no deja
+ * ninguna huella en utm_historial).
+ */
+class EjecutorQueCuentaLlamadas implements EjecutorSql {
+  llamadasAEjecutar = 0;
+
+  constructor(private readonly real: EjecutorSql) {}
+
+  async ejecutar(sql: string): Promise<void> {
+    this.llamadasAEjecutar += 1;
+    return this.real.ejecutar(sql);
+  }
+
+  async correr(sql: string, params?: unknown[]): Promise<ResultadoEscritura> {
+    return this.real.correr(sql, params);
+  }
+
+  async consultar<T>(sql: string, params?: unknown[]): Promise<T[]> {
+    return this.real.consultar<T>(sql, params);
+  }
+}
+
+/**
+ * Ejecutor falso cuyo `correr()` siempre informa `ultimoId: null`, como
+ * haría un motor que no puede reportar el id de la fila insertada. Existe
+ * para cubrir la guarda de insertarPago (repositorio.ts) que hoy no tiene
+ * ninguna prueba: sin ella, insertarPago devolvería `null` disfrazado de
+ * número en vez de fallar con un mensaje claro.
+ */
+class EjecutorQueNuncaDaId implements EjecutorSql {
+  async ejecutar(): Promise<void> {}
+
+  async correr(): Promise<ResultadoEscritura> {
+    return { cambios: 1, ultimoId: null };
+  }
+
+  async consultar<T>(): Promise<T[]> {
+    return [];
+  }
+}
+
+/**
  * Delega en un EjecutorNode real, pero lanza al llegar a la N-ésima
  * escritura (`correr`). Simula el proceso muriendo a mitad de un lote,
  * para verificar que guardarUtmBulk revierte lo que alcanzó a escribir.
@@ -131,6 +178,13 @@ describe('insertarPago', () => {
     const id = await repo.insertarPago({ ...PAGO_BASE, utmFactor: null });
     const pago = await repo.obtenerPagoPorId(id);
     expect(pago!.utmFactor).toBeNull();
+  });
+
+  it('lanza si el ejecutor no devuelve un id', async () => {
+    const repoSinId = new RepositorioPagos(new EjecutorQueNuncaDaId());
+    await expect(repoSinId.insertarPago(PAGO_BASE)).rejects.toThrow(
+      'No se pudo insertar el pago: SQLite no devolvió un id.',
+    );
   });
 });
 
@@ -382,7 +436,19 @@ describe('RepositorioUtm', () => {
   });
 
   it('guardarUtmBulk con un mapa vacío no hace nada ni falla', async () => {
-    await utm.guardarUtmBulk(2025, new Map(), AHORA);
+    // No basta con comprobar que la tabla queda vacía: un BEGIN + COMMIT
+    // sin escrituras de por medio también la deja vacía, así que esa
+    // aserción por sí sola pasaba con o sin la guarda de mapa vacío -era
+    // código muerto-. Se fija acá contando las llamadas a ejecutar(): con
+    // un mapa vacío, guardarUtmBulk no debe ni siquiera abrir una
+    // transacción, para no pagar ese costo (o, contra el plugin real, ese
+    // efecto) sin ninguna escritura detrás.
+    const ejecutorContado = new EjecutorQueCuentaLlamadas(ejecutor);
+    const utmContado = new RepositorioUtm(ejecutorContado);
+
+    await utmContado.guardarUtmBulk(2025, new Map(), AHORA);
+
+    expect(ejecutorContado.llamadasAEjecutar).toBe(0);
     const filas = await ejecutor.consultar<{ n: number }>(
       'SELECT COUNT(*) AS n FROM utm_historial',
     );
