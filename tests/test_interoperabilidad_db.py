@@ -132,10 +132,33 @@ def test_el_escritorio_no_migra_una_base_del_movil(db_del_movil, monkeypatch):
 
 PAGOS_SINTETICOS = [
     # (mes, anio, utm_valor, cuota_pactada, monto_pagado, desbalance, utm_factor)
-    (1, 2025, 67294, 201882.0, 200000, -1882.0, 3.0),
-    (2, 2025, 67429, 202287.0, 202287, 0.0, 3.0),
-    (3, 2025, 68034, 204102.0, 210000, 5898.0, 3.0),
-    (11, 2024, 66000, 198000.0, 198000, 0.0, 3.0),
+    #
+    # Los desbalances de este bloque son deliberadamente NO enteros. Con
+    # desbalances enteros (versión anterior de esta constante), el saldo
+    # corrido que arma obtener_historial_desbalances() / obtenerHistorial-
+    # Desbalances() da el mismo número se redondee o no en cada paso, así
+    # que un mutante que le quitara el redondeo a `acumuladoCorrido` en el
+    # lado TypeScript (mobile/src/core/calculos.ts) pasaba las 6 pruebas de
+    # este archivo sin que ninguna se diera cuenta. Ver docstring del
+    # módulo de mutación y el reporte de la tarea 5.
+    #
+    # Aquí monto_pagado (lo efectivamente transferido) es un peso redondo
+    # -como en la vida real, no se transfieren centavos- pero cuota_pactada
+    # lleva milésimos de peso -como los deja el valor UTM oficial, que el
+    # SII publica con dos decimales, multiplicado por un factor con más
+    # decimales-, así que desbalance = monto_pagado - cuota_pactada hereda
+    # esos milésimos. El pago de noviembre-2024 deja el acumulado crudo
+    # (sin redondear) justo en -0.005: un empate de redondeo real, el
+    # punto exacto donde Python (par más cercano) y un `Math.round` u otro
+    # redondeo "hacia arriba" en JavaScript discreparían si el port
+    # estuviera mal. Los valores esperados de estas pruebas nunca se
+    # calculan a mano: los produce en tiempo de ejecución
+    # calculation_service (la referencia), tanto para el resumen como
+    # para el historial (ver test_los_calculos_coinciden_sobre_la_misma_base).
+    (1, 2025, 67294, 201881.995, 200000, -1881.995, 3.0),
+    (2, 2025, 67429, 202286.995, 202287, 0.005, 3.0),
+    (3, 2025, 68034, 204101.495, 210000, 5898.505, 3.0),
+    (11, 2024, 66000, 198000.005, 198000, -0.005, 3.0),  # año distinto: cubre el orden
 ]
 
 
