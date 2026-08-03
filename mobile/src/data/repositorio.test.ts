@@ -1,7 +1,38 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import type { EjecutorSql, ResultadoEscritura } from './ejecutor';
 import { EjecutorNode } from './ejecutor-node';
 import { inicializarBd } from './esquema';
 import { RepositorioConfiguracion, RepositorioPagos, RepositorioUtm } from './repositorio';
+
+/**
+ * Delega en un EjecutorNode real, pero lanza al llegar a la N-ésima
+ * escritura (`correr`). Simula el proceso muriendo a mitad de un lote,
+ * para verificar que guardarUtmBulk revierte lo que alcanzó a escribir.
+ */
+class EjecutorQueFallaAlEscribir implements EjecutorSql {
+  private escrituras = 0;
+
+  constructor(
+    private readonly real: EjecutorSql,
+    private readonly fallaEnLaEscritura: number,
+  ) {}
+
+  async ejecutar(sql: string): Promise<void> {
+    return this.real.ejecutar(sql);
+  }
+
+  async correr(sql: string, params?: unknown[]): Promise<ResultadoEscritura> {
+    this.escrituras += 1;
+    if (this.escrituras === this.fallaEnLaEscritura) {
+      throw new Error('fallo simulado en la escritura número ' + this.escrituras);
+    }
+    return this.real.correr(sql, params);
+  }
+
+  async consultar<T>(sql: string, params?: unknown[]): Promise<T[]> {
+    return this.real.consultar<T>(sql, params);
+  }
+}
 
 const AHORA = '2025-06-15 10:30:00';
 
@@ -241,6 +272,27 @@ describe('RepositorioUtm', () => {
       'SELECT COUNT(*) AS n FROM utm_historial',
     );
     expect(filas[0]!.n).toBe(3);
+  });
+
+  it('guardarUtmBulk revierte todo si una escritura de en medio falla', async () => {
+    // Simula el proceso muriendo entre dos escrituras del lote (p. ej. la
+    // app pasa a segundo plano en el teléfono). El escritorio garantiza una
+    // sola transacción para todo el lote; el móvil debe igualar esa garantía.
+    const ejecutorQueFalla = new EjecutorQueFallaAlEscribir(ejecutor, 2);
+    const utmQueFalla = new RepositorioUtm(ejecutorQueFalla);
+
+    await expect(
+      utmQueFalla.guardarUtmBulk(
+        2025,
+        new Map([[1, 67294], [2, 67429], [3, 68034]]),
+        AHORA,
+      ),
+    ).rejects.toThrow('fallo simulado en la escritura número 2');
+
+    const filas = await ejecutor.consultar<{ n: number }>(
+      'SELECT COUNT(*) AS n FROM utm_historial',
+    );
+    expect(filas[0]!.n).toBe(0);
   });
 
   it('guardarUtmBulk con un mapa vacío no hace nada ni falla', async () => {

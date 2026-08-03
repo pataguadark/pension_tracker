@@ -201,12 +201,35 @@ export class RepositorioUtm {
    * Guarda varios meses de un mismo año. mindicador.cl trae el año
    * completo en una petición, así que se cachea todo lo recibido en vez
    * de hacer una escritura por mes.
+   *
+   * Una sola transacción para todo el lote, igual que el escritorio
+   * (db_manager.py:294-311, "una sola conexión, una sola transacción"): si
+   * el proceso muere entre dos escrituras -por ejemplo porque el sistema
+   * operativo suspende la app al pasar a segundo plano- no debe quedar un
+   * mes escrito y los demás no. BEGIN/COMMIT/ROLLBACK van por
+   * `ejecutar()`, no por un mecanismo propio de node:sqlite: es el mismo
+   * método por el que @capacitor-community/sqlite espera las sentencias
+   * de control de transacción en el teléfono.
    */
   async guardarUtmBulk(anio: number, valores: Map<number, number>,
                        ahora: string = ahoraPorDefecto()): Promise<void> {
     if (valores.size === 0) return;
-    for (const [mes, valor] of valores) {
-      await this.guardarUtm(anio, mes, valor, ahora);
+    await this.ejecutor.ejecutar('BEGIN');
+    try {
+      for (const [mes, valor] of valores) {
+        await this.guardarUtm(anio, mes, valor, ahora);
+      }
+      await this.ejecutor.ejecutar('COMMIT');
+    } catch (error) {
+      // El rollback en sí puede fallar (p. ej. conexión ya caída); si eso
+      // ocurre, se propaga el error original del lote, no el del rollback,
+      // para no ocultar la causa real.
+      try {
+        await this.ejecutor.ejecutar('ROLLBACK');
+      } catch {
+        // Se ignora: el error del lote ya va a lanzarse abajo.
+      }
+      throw error;
     }
   }
 
