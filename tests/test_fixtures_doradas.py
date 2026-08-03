@@ -191,6 +191,22 @@ def a_snake(pago: dict) -> dict:
     return {MAPA_CLAVES.get(k, k): v for k, v in pago.items()}
 
 
+def a_snake_con_no_finitos(pago: dict) -> dict:
+    """a_snake() más la conversión "NaN"/"Infinity"/"-Infinity" de
+    utm_factor/utm_valor. Se usa en los bloques "acumulado" e "historial",
+    donde cada pago vive dentro de una lista: ahí se necesita poder
+    representar una fila individual con un valor no finito persistido
+    (ver punto 2 de la revisión: una fila corrupta no debe tumbar el
+    cálculo agregado de las demás), sin afectar los demás campos del pago.
+    """
+    convertido = a_snake(pago)
+    if "utm_factor" in convertido:
+        convertido["utm_factor"] = _convertir_no_finito(convertido["utm_factor"])
+    if "utm_valor" in convertido:
+        convertido["utm_valor"] = _convertir_no_finito(convertido["utm_valor"])
+    return convertido
+
+
 @pytest.mark.parametrize("nombre,entrada,esperado", casos("desbalance-utm.json", "mensual"))
 def test_desbalance_utm_mensual_contra_fixtures(nombre, entrada, esperado):
     pago = a_snake(entrada)
@@ -211,7 +227,7 @@ def test_desbalance_utm_mensual_contra_fixtures(nombre, entrada, esperado):
 
 @pytest.mark.parametrize("nombre,entrada,esperado", casos("desbalance-utm.json", "acumulado"))
 def test_desbalance_acumulado_utm_contra_fixtures(nombre, entrada, esperado):
-    pagos = [a_snake(p) for p in entrada["pagos"]]
+    pagos = [a_snake_con_no_finitos(p) for p in entrada["pagos"]]
     utm_valor_actual = _convertir_no_finito(entrada["utmValorActual"])
 
     if espera_error(esperado):
@@ -249,7 +265,7 @@ CLAVES_FILA = (
 
 @pytest.mark.parametrize("nombre,entrada,esperado", casos("historial-corrido.json", "historial"))
 def test_historial_corrido_contra_fixtures(nombre, entrada, esperado):
-    pagos = [a_snake(p) for p in entrada["pagos"]]
+    pagos = [a_snake_con_no_finitos(p) for p in entrada["pagos"]]
     obtenido = obtener_historial_desbalances(entrada["utmValorActual"], pagos)
 
     assert len(obtenido) == len(esperado)

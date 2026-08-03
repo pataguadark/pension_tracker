@@ -88,6 +88,31 @@ export function calcularDesbalanceUtmMensual(pago: Pago): number | null {
 }
 
 /**
+ * Igual que calcularDesbalanceUtmMensual(), pero para agregar sobre
+ * MUCHAS filas ya persistidas: si una fila individual trae un
+ * utmFactor/utmValor no finito (posible en datos guardados por una
+ * versión anterior de la app, antes de que existiera esta validación),
+ * no debe tumbar el cálculo agregado completo. Se trata esa fila como
+ * si no tuviera dato UTM (null), igual que cuando falta directamente, y
+ * el resto de las filas se calculan con normalidad.
+ *
+ * calcularDesbalanceUtmMensual() en sí sigue lanzando cuando se llama
+ * directamente sobre un solo pago: eso es correcto y está cubierto por
+ * las fixtures doradas (desbalance-utm.json, bloque "mensual"). Esta
+ * función solo envuelve esa llamada para los dos lugares que iteran
+ * sobre una lista completa de pagos (obtenerHistorialDesbalances y
+ * calcularDesbalanceAcumuladoUtm), que es donde una fila corrupta no
+ * debe poder tumbar la vista.
+ */
+function desbalanceUtmMensualTolerante(pago: Pago): number | null {
+  try {
+    return calcularDesbalanceUtmMensual(pago);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Suma las diferencias mensuales en UTM y expresa el total en pesos a
  * utmValorActual — así calculan la deuda los Tribunales de Familia.
  *
@@ -103,7 +128,7 @@ export function calcularDesbalanceAcumuladoUtm(
 
   let totalUtm = 0;
   for (const pago of pagos) {
-    const diff = calcularDesbalanceUtmMensual(pago);
+    const diff = desbalanceUtmMensualTolerante(pago);
     if (diff !== null) {
       totalUtm += diff;
     }
@@ -151,7 +176,7 @@ export function obtenerHistorialDesbalances(
   for (const pago of ordenados) {
     acumuladoCorrido = redondear(acumuladoCorrido + pago.desbalance, 2);
 
-    const diffUtm = calcularDesbalanceUtmMensual(pago);
+    const diffUtm = desbalanceUtmMensualTolerante(pago);
     if (diffUtm !== null) {
       acumuladoUtmCorrido += diffUtm;
     }

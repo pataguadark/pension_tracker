@@ -116,6 +116,17 @@
         ]
       },
       "esperado": { "error": true }
+    },
+    {
+      "nombre": "fila con utmFactor no finito no tumba el acumulado: se trata como fila sin dato UTM",
+      "entrada": {
+        "utmValorActual": 70000,
+        "pagos": [
+          { "mesPago": 1, "anioPago": 2025, "utmFactor": 3.0, "utmValor": 67294, "cuotaPactada": 201882.0, "montoPagado": 200000, "desbalance": -1882.0 },
+          { "mesPago": 2, "anioPago": 2025, "utmFactor": "Infinity", "utmValor": 67429, "cuotaPactada": 202287.0, "montoPagado": 202287, "desbalance": 0.0 }
+        ]
+      },
+      "esperado": { "desbalanceAcumuladoUtm": -0.028, "desbalanceAjustado": -1957.68, "estado": "DEUDA" }
     }
   ]
 }

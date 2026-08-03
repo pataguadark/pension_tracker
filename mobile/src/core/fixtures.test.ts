@@ -163,6 +163,22 @@ describe('calcularDesbalanceMensual contra fixtures', () => {
   });
 });
 
+/**
+ * Aplica convertirNoFinito a utmFactor/utmValor de un pago dentro de una
+ * lista. Se usa en los bloques "acumulado" e "historial", donde cada
+ * pago vive dentro de un arreglo: ahí se necesita poder representar una
+ * fila individual con un valor no finito persistido (una fila corrupta
+ * no debe tumbar el cálculo agregado de las demás), sin tocar el resto
+ * de los campos del pago.
+ */
+function convertirNoFinitosDePago(pago: Pago): Pago {
+  return {
+    ...pago,
+    utmFactor: convertirNoFinito(pago.utmFactor) as number | null,
+    utmValor: convertirNoFinito(pago.utmValor) as number,
+  };
+}
+
 const desbalanceUtm = cargar('desbalance-utm.json');
 
 // Nota: las fixtures del bloque `mensual` no traen las claves `mesPago`,
@@ -194,11 +210,12 @@ describe('calcularDesbalanceUtmMensual contra fixtures', () => {
 
 describe('calcularDesbalanceAcumuladoUtm contra fixtures', () => {
   it.each(obtenerCasos(desbalanceUtm, 'acumulado'))('$nombre', ({ entrada, esperado }) => {
-    const { utmValorActual, pagos } = entrada as {
+    const { utmValorActual, pagos: pagosCrudos } = entrada as {
       utmValorActual: unknown;
       pagos: Pago[];
     };
     const valorActual = convertirNoFinito(utmValorActual) as number | null;
+    const pagos = pagosCrudos.map(convertirNoFinitosDePago);
 
     if (esperaError(esperado)) {
       expect(() => calcularDesbalanceAcumuladoUtm(valorActual, pagos)).toThrow();
@@ -237,10 +254,11 @@ interface FilaEsperada {
 
 describe('obtenerHistorialDesbalances contra fixtures', () => {
   it.each(obtenerCasos(historialCorrido, 'historial'))('$nombre', ({ entrada, esperado }) => {
-    const { utmValorActual, pagos } = entrada as {
+    const { utmValorActual, pagos: pagosCrudos } = entrada as {
       utmValorActual: number | null;
       pagos: Pago[];
     };
+    const pagos = pagosCrudos.map(convertirNoFinitosDePago);
     const obtenido = obtenerHistorialDesbalances(pagos, utmValorActual);
     const filas = esperado as unknown as FilaEsperada[];
 

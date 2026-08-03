@@ -65,6 +65,20 @@
         { "mesPago": 2, "desbalanceCorrido": -1882.0, "estadoCorrido": "DEUDA", "desbalanceUtmMesPesos": null, "desbalanceUtmCorridoPesos": null, "estadoUtmMes": null, "estadoUtmCorrido": null },
         { "mesPago": 1, "desbalanceCorrido": -1882.0, "estadoCorrido": "DEUDA", "desbalanceUtmMesPesos": null, "desbalanceUtmCorridoPesos": null, "estadoUtmMes": null, "estadoUtmCorrido": null }
       ]
+    },
+    {
+      "nombre": "fila con utmFactor no finito no tumba el historial: esa fila queda sin dato UTM, el resto se calcula normal",
+      "entrada": {
+        "utmValorActual": 70000,
+        "pagos": [
+          { "mesPago": 1, "anioPago": 2025, "utmFactor": 3.0, "utmValor": 67294, "cuotaPactada": 201882.0, "montoPagado": 200000, "desbalance": -1882.0 },
+          { "mesPago": 2, "anioPago": 2025, "utmFactor": "Infinity", "utmValor": 67429, "cuotaPactada": 202287.0, "montoPagado": 202287, "desbalance": 0.0 }
+        ]
+      },
+      "esperado": [
+        { "mesPago": 2, "desbalanceCorrido": -1882.0, "estadoCorrido": "DEUDA", "desbalanceUtmMesPesos": null, "desbalanceUtmCorridoPesos": null, "estadoUtmMes": null, "estadoUtmCorrido": null },
+        { "mesPago": 1, "desbalanceCorrido": -1882.0, "estadoCorrido": "DEUDA", "desbalanceUtmMesPesos": -1957.68, "desbalanceUtmCorridoPesos": -1957.68, "estadoUtmMes": "DEUDA", "estadoUtmCorrido": "DEUDA" }
+      ]
     }
   ],
   "resumen": [

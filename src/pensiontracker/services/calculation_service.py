@@ -145,6 +145,30 @@ def calcular_desbalance_utm_mensual(pago: dict) -> float | None:
     return (pago["monto_pagado"] / utm_valor) - factor
 
 
+def _desbalance_utm_mensual_tolerante(pago: dict) -> float | None:
+    """
+    Igual que calcular_desbalance_utm_mensual(), pero para agregar sobre
+    MUCHAS filas ya persistidas: si una fila individual trae un
+    utm_factor/utm_valor no finito (posible en datos guardados por una
+    versión anterior de la app, antes de que existiera esta validación),
+    no debe tumbar el cálculo agregado completo. Se trata esa fila como
+    si no tuviera dato UTM (None), igual que cuando falta directamente,
+    y el resto de las filas se calculan con normalidad.
+
+    calcular_desbalance_utm_mensual() en sí sigue lanzando ValueError
+    cuando se llama directamente sobre un solo pago: eso es correcto y
+    está cubierto por las fixtures doradas (desbalance-utm.json,
+    bloque "mensual"). Esta función solo envuelve esa llamada para los
+    dos lugares que iteran sobre una lista completa de pagos
+    (obtener_historial_desbalances y calcular_desbalance_acumulado_utm),
+    que es donde una fila corrupta no debe poder tumbar la vista.
+    """
+    try:
+        return calcular_desbalance_utm_mensual(pago)
+    except ValueError:
+        return None
+
+
 def calcular_desbalance_acumulado_utm(utm_valor_actual: float | None,
                                       pagos: list | None = None) -> dict:
     """
@@ -163,7 +187,7 @@ def calcular_desbalance_acumulado_utm(utm_valor_actual: float | None,
 
     total_utm = 0.0
     for pago in pagos:
-        diff_utm = calcular_desbalance_utm_mensual(pago)
+        diff_utm = _desbalance_utm_mensual_tolerante(pago)
         if diff_utm is not None:
             total_utm += diff_utm
 
@@ -431,7 +455,7 @@ def obtener_historial_desbalances(utm_valor_actual: float | None = None,
     for pago in pagos_ordenados:
         acumulado_corrido = round(acumulado_corrido + pago["desbalance"], 2)
 
-        diff_utm = calcular_desbalance_utm_mensual(pago)
+        diff_utm = _desbalance_utm_mensual_tolerante(pago)
         if diff_utm is not None:
             acumulado_utm_corrido += diff_utm
 

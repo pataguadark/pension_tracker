@@ -76,6 +76,40 @@ def test_historial_vacio_muestra_estado_vacio(client):
     assert "Sin pagos registrados".encode() in resp.data
 
 
+def test_historial_con_fila_utm_factor_infinito_no_revienta(client):
+    """
+    Regresión: v1.0.0 no validaba finitud al guardar (limpiar_factor
+    aceptaba 'inf'/'1e400' y calcular_cuota_pactada solo comprobaba
+    <= 0), así que un utm_factor infinito quedó persistido en bases de
+    datos reales. Antes de esta rama esa fila renderizaba "$inf"; con
+    los guards nuevos de finitud, /historial y /historial/<anio>
+    reventaban con un ValueError sin capturar en vez de degradar la
+    fila. Un dato ya guardado, no importa cuán corrupto, no debe poder
+    tumbar la vista principal de un usuario real.
+    """
+    db_manager.insertar_pago(
+        fecha="2025-01-15", mes_pago=1, anio_pago=2025,
+        utm_valor=67294, cuota_pactada=201882.0,
+        monto_pagado=200000, desbalance=-1882.0,
+        utm_factor=float("inf"),
+    )
+    db_manager.insertar_pago(
+        fecha="2025-02-15", mes_pago=2, anio_pago=2025,
+        utm_valor=67429, cuota_pactada=202287.0,
+        monto_pagado=202287, desbalance=0.0,
+        utm_factor=3.0,
+    )
+
+    resp = client.get("/historial")
+    assert resp.status_code == 200
+    # La fila sana sigue intacta pese a la corrupta.
+    assert "202.287".encode() in resp.data
+
+    resp_anio = client.get("/historial/2025")
+    assert resp_anio.status_code == 200
+    assert "202.287".encode() in resp_anio.data
+
+
 def test_editar_pago_actualiza_valores(client):
     _registrar_pago(client)
 
