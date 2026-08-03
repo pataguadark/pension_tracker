@@ -18,7 +18,9 @@
     { "nombre": "notacion cientifica", "entrada": "1e10", "esperado": { "error": true } },
     { "nombre": "notacion cientifica con decimal", "entrada": "3.5e2", "esperado": { "error": true } },
     { "nombre": "signo mas explicito", "entrada": "+3,5", "esperado": { "error": true } },
-    { "nombre": "negativo se parsea, lo rechaza la validacion de la ruta", "entrada": "-3,5", "esperado": -3.5 }
+    { "nombre": "negativo se parsea, lo rechaza la validacion de la ruta", "entrada": "-3,5", "esperado": -3.5 },
+    { "nombre": "rechaza digitos unicode no ASCII sin separador", "entrada": "٦٩٨٨٩", "esperado": { "error": true } },
+    { "nombre": "rechaza digitos unicode no ASCII con decimal", "entrada": "٣.٥", "esperado": { "error": true } }
   ],
   "limpiarEntero": [
     { "nombre": "miles con punto", "entrada": "69.889", "esperado": 69889 },

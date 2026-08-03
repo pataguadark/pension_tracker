@@ -9,7 +9,7 @@ routes/utm.py).
 import math
 import re
 
-_FACTOR_VALIDO = re.compile(r"^-?\d*\.?\d+$")
+_FACTOR_VALIDO = re.compile(r"^-?[0-9]*\.?[0-9]+$")
 _ENTERO_VALIDO = re.compile(r"^-?[0-9]+$")
 
 
@@ -78,8 +78,10 @@ def limpiar_factor(valor: str) -> float:
 
     # float() acepta notación científica ('1e10'), signo '+' y 'nan'/'inf',
     # pero un factor UTM no admite ninguna de esas formas en la realidad.
-    # Se exige la misma forma estricta que el TypeScript (^-?\d*\.?\d+$)
-    # antes de convertir, para que ambos lados rechacen igual.
+    # Se exige la misma forma estricta que el TypeScript (^-?\d*\.?\d+$,
+    # donde \d sin flag /u solo matchea 0-9); acá se usa [0-9] explícito
+    # en vez de \d, que en un patrón Python sí matchea dígitos Unicode
+    # (p. ej. arábigo-índicos), para que ambos lados rechacen igual.
     if not _FACTOR_VALIDO.match(normalizado):
         raise ValueError(f"Factor UTM inválido: {valor!r}")
 
