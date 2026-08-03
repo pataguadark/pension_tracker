@@ -37,6 +37,16 @@ def estructura(ruta_db: Path) -> dict:
     escritorio) es equivalente a una declarada inline con el mismo tipo y
     la misma nulabilidad: es justamente el caso que este archivo necesita
     tratar como compatible.
+
+    La única excepción a "no comparar el texto crudo" es AUTOINCREMENT:
+    PRAGMA table_info no lo reporta -una tabla con esa palabra y otra sin
+    ella, mismas columnas, dan filas idénticas-, pero cambia el
+    comportamiento real: sin AUTOINCREMENT, sqlite recicla el id de la fila
+    borrada más alta al insertar de nuevo; con AUTOINCREMENT, siempre
+    asigna uno nuevo. Que un id pase a referirse a otro pago es serio en un
+    contexto legal, así que se agrega un indicador por tabla leyendo
+    `sqlite_master.sql` (el único lugar donde AUTOINCREMENT queda
+    registrado).
     """
     conn = sqlite3.connect(ruta_db)
     try:
@@ -48,14 +58,26 @@ def estructura(ruta_db: Path) -> dict:
             )
         ]
         return {
-            tabla: [
-                (c[1], c[2].upper(), bool(c[3]))
-                for c in conn.execute(f"PRAGMA table_info('{tabla}')")
-            ]
+            tabla: (
+                [
+                    (c[1], c[2].upper(), bool(c[3]))
+                    for c in conn.execute(f"PRAGMA table_info('{tabla}')")
+                ],
+                _tiene_autoincrement(conn, tabla),
+            )
             for tabla in tablas
         }
     finally:
         conn.close()
+
+
+def _tiene_autoincrement(conn: sqlite3.Connection, tabla: str) -> bool:
+    """Si el DDL guardado en sqlite_master declara AUTOINCREMENT para `tabla`."""
+    fila = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name=?", (tabla,)
+    ).fetchone()
+    sql = fila[0] if fila and fila[0] else ""
+    return "AUTOINCREMENT" in sql.upper()
 
 
 @pytest.fixture
@@ -103,6 +125,60 @@ def test_ambas_plataformas_crean_la_misma_estructura(db_del_escritorio, db_del_m
     assert estructura(db_del_movil) == estructura(db_del_escritorio)
 
 
+def test_estructura_distingue_tablas_con_y_sin_autoincrement(tmp_path):
+    """PRAGMA table_info no reporta AUTOINCREMENT, así que dos tablas con
+    las mismas columnas -una con AUTOINCREMENT y la otra sin- se veían
+    iguales para `estructura()`. La diferencia es seria: al borrar una fila
+    y volver a insertar, la tabla CON AUTOINCREMENT asigna un id nuevo; la
+    tabla SIN, recicla el id borrado. Un id que pasa a referirse a otro
+    pago es grave en un contexto legal.
+    """
+    con_autoincrement = tmp_path / "con_autoincrement.db"
+    sin_autoincrement = tmp_path / "sin_autoincrement.db"
+
+    conn = sqlite3.connect(con_autoincrement)
+    conn.execute("CREATE TABLE pagos (id INTEGER PRIMARY KEY AUTOINCREMENT, x INTEGER)")
+    conn.commit()
+    conn.close()
+
+    conn = sqlite3.connect(sin_autoincrement)
+    conn.execute("CREATE TABLE pagos (id INTEGER PRIMARY KEY, x INTEGER)")
+    conn.commit()
+    conn.close()
+
+    assert estructura(con_autoincrement) != estructura(sin_autoincrement)
+
+
+def test_autoincrement_evita_que_un_id_borrado_se_reutilice(tmp_path):
+    """Demuestra el riesgo concreto que motiva la prueba anterior: sin
+    AUTOINCREMENT, sqlite reutiliza el id de la fila borrada más alta."""
+    con_autoincrement = tmp_path / "con_autoincrement.db"
+    sin_autoincrement = tmp_path / "sin_autoincrement.db"
+
+    for ruta, ddl in (
+        (con_autoincrement, "CREATE TABLE t (id INTEGER PRIMARY KEY AUTOINCREMENT, x INTEGER)"),
+        (sin_autoincrement, "CREATE TABLE t (id INTEGER PRIMARY KEY, x INTEGER)"),
+    ):
+        conn = sqlite3.connect(ruta)
+        conn.execute(ddl)
+        for i in range(1, 4):
+            conn.execute("INSERT INTO t (x) VALUES (?)", (i,))
+        conn.execute("DELETE FROM t WHERE id = 3")
+        conn.execute("INSERT INTO t (x) VALUES (99)")
+        conn.commit()
+        conn.close()
+
+    def ultimo_id(ruta):
+        conn = sqlite3.connect(ruta)
+        try:
+            return conn.execute("SELECT id FROM t WHERE x = 99").fetchone()[0]
+        finally:
+            conn.close()
+
+    assert ultimo_id(con_autoincrement) == 4
+    assert ultimo_id(sin_autoincrement) == 3
+
+
 def test_el_escritorio_lee_una_base_creada_por_el_movil(db_del_movil, monkeypatch):
     monkeypatch.setattr(db_manager, "DB_PATH", db_del_movil)
     pago_id = db_manager.insertar_pago(
@@ -120,7 +196,117 @@ def test_el_escritorio_no_migra_una_base_del_movil(db_del_movil, monkeypatch):
     """La migración de utm_factor debe verla ya presente y no volver a agregarla."""
     monkeypatch.setattr(db_manager, "DB_PATH", db_del_movil)
     db_manager.inicializar_db()
-    columnas = estructura(db_del_movil)["pagos"]
+    columnas = estructura(db_del_movil)["pagos"][0]
+    nombres = [c[0] for c in columnas]
+    assert nombres.count("utm_factor") == 1
+
+
+def _crear_base_legacy_del_escritorio(ruta: Path) -> None:
+    """Crea una base como la dejaría una versión del escritorio anterior a
+    utm_factor: tabla `pagos` de 8 columnas, sin esa, con una fila de datos.
+    """
+    conn = sqlite3.connect(ruta)
+    try:
+        conn.execute("""
+            CREATE TABLE pagos (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                fecha         TEXT    NOT NULL,
+                mes_pago      INTEGER NOT NULL,
+                anio_pago     INTEGER NOT NULL,
+                utm_valor     REAL    NOT NULL,
+                cuota_pactada REAL    NOT NULL,
+                monto_pagado  REAL    NOT NULL,
+                desbalance    REAL    NOT NULL
+            )
+        """)
+        conn.execute("""
+            INSERT INTO pagos
+                (fecha, mes_pago, anio_pago, utm_valor,
+                 cuota_pactada, monto_pagado, desbalance)
+            VALUES ('2024-05-05', 5, 2024, 65000, 195000.0, 195000, 0.0)
+        """)
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _correr_script_movil(ruta_db: Path, script: str) -> subprocess.CompletedProcess:
+    script_temporal = MOBILE / f".tmp-interop-{uuid.uuid4().hex}.mts"
+    script_temporal.write_text(script, encoding="utf-8")
+    try:
+        return subprocess.run(
+            ["npx", "vite-node", str(script_temporal)],
+            cwd=MOBILE, capture_output=True, text=True,
+        )
+    finally:
+        script_temporal.unlink(missing_ok=True)
+
+
+def test_el_movil_migra_una_base_legacy_del_escritorio(tmp_path, monkeypatch):
+    """Una base creada por un escritorio anterior a utm_factor (8 columnas
+    en `pagos`, sin esa) debe ser migrada por `inicializarBd`, no rechazada.
+
+    Es el hallazgo crítico de la revisión final: el escritorio migra estas
+    bases al arrancar (ALTER TABLE condicional, ver db_manager.py:88-97);
+    el móvil, al no replicar esa migración, fallaba con "no such column:
+    utm_factor" en cualquier lectura o escritura sobre `pagos`.
+    """
+    ruta = tmp_path / "legacy.db"
+    _crear_base_legacy_del_escritorio(ruta)
+
+    # El móvil abre la base legacy y debería migrarla.
+    resultado = _correr_script_movil(ruta, (
+        "import { EjecutorNode } from './src/data/ejecutor-node.ts';\n"
+        "import { inicializarBd } from './src/data/esquema.ts';\n"
+        f"const e = new EjecutorNode({json.dumps(str(ruta))});\n"
+        "await inicializarBd(e);\n"
+        "e.cerrar();\n"
+    ))
+    assert resultado.returncode == 0, (
+        f"inicializarBd falló sobre una base legacy:\n"
+        f"{resultado.stdout}\n{resultado.stderr}"
+    )
+
+    # (a) inicializarBd migró: la columna utm_factor ahora existe.
+    columnas = estructura(ruta)["pagos"][0]
+    nombres = [c[0] for c in columnas]
+    assert "utm_factor" in nombres
+
+    # (b) el móvil lee la fila existente, y (c) su utm_factor queda en nulo.
+    visto = _leer_con_typescript(ruta)
+    assert len(visto["pagos"]) == 1
+    anio, mes, monto_pagado, desbalance, utm_factor = visto["pagos"][0]
+    assert (anio, mes, monto_pagado, desbalance) == (2024, 5, 195000.0, 0.0)
+    assert utm_factor is None
+
+    # Tras la migración del móvil, el escritorio la sigue leyendo bien.
+    monkeypatch.setattr(db_manager, "DB_PATH", ruta)
+    pagos = db_manager.obtener_todos_los_pagos()
+    assert len(pagos) == 1
+    assert pagos[0]["mes_pago"] == 5
+    assert pagos[0]["utm_factor"] is None
+
+
+def test_el_movil_migra_una_base_legacy_de_forma_idempotente(tmp_path):
+    """Correr inicializarBd dos veces sobre una base legacy no debe fallar
+    ni duplicar la columna utm_factor."""
+    ruta = tmp_path / "legacy_idempotente.db"
+    _crear_base_legacy_del_escritorio(ruta)
+
+    script = (
+        "import { EjecutorNode } from './src/data/ejecutor-node.ts';\n"
+        "import { inicializarBd } from './src/data/esquema.ts';\n"
+        f"const e = new EjecutorNode({json.dumps(str(ruta))});\n"
+        "await inicializarBd(e);\n"
+        "await inicializarBd(e);\n"
+        "e.cerrar();\n"
+    )
+    resultado = _correr_script_movil(ruta, script)
+    assert resultado.returncode == 0, (
+        f"la segunda migración falló:\n{resultado.stdout}\n{resultado.stderr}"
+    )
+
+    columnas = estructura(ruta)["pagos"][0]
     nombres = [c[0] for c in columnas]
     assert nombres.count("utm_factor") == 1
 
