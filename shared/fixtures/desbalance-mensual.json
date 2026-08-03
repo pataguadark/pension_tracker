@@ -1,0 +1,10 @@
+{
+  "descripcion": "diferencia = monto_pagado - cuota_pactada, redondeada a 2 decimales. Signo: >0 EXCEDENTE, =0 EXACTO, <0 DEUDA.",
+  "casos": [
+    { "nombre": "pago exacto", "entrada": { "montoPagado": 210000, "cuotaPactada": 210000 }, "esperado": { "diferencia": 0, "estado": "EXACTO" } },
+    { "nombre": "pago en exceso", "entrada": { "montoPagado": 215000, "cuotaPactada": 210000 }, "esperado": { "diferencia": 5000, "estado": "EXCEDENTE" } },
+    { "nombre": "pago deficiente", "entrada": { "montoPagado": 200000, "cuotaPactada": 210000 }, "esperado": { "diferencia": -10000, "estado": "DEUDA" } },
+    { "nombre": "diferencia con decimales", "entrada": { "montoPagado": 213588, "cuotaPactada": 213588.75 }, "esperado": { "diferencia": -0.75, "estado": "DEUDA" } },
+    { "nombre": "sin pago", "entrada": { "montoPagado": 0, "cuotaPactada": 210000 }, "esperado": { "diferencia": -210000, "estado": "DEUDA" } }
+  ]
+}

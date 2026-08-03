@@ -1,0 +1,14 @@
+{
+  "descripcion": "cuota_pactada = utm_factor x utm_valor, redondeada a 2 decimales.",
+  "casos": [
+    { "nombre": "factor entero", "entrada": { "utmFactor": 3, "utmValor": 70000 }, "esperado": 210000 },
+    { "nombre": "factor con decimales", "entrada": { "utmFactor": 3.0561, "utmValor": 69889 }, "esperado": 213587.77 },
+    { "nombre": "factor con medio punto", "entrada": { "utmFactor": 3.5, "utmValor": 70000 }, "esperado": 245000 },
+    { "nombre": "empate al par hacia abajo", "entrada": { "utmFactor": 1.005, "utmValor": 1000 }, "esperado": 1005 },
+    { "nombre": "factor pequeno", "entrada": { "utmFactor": 0.5, "utmValor": 68923 }, "esperado": 34461.5 },
+    { "nombre": "factor cero", "entrada": { "utmFactor": 0, "utmValor": 70000 }, "esperado": { "error": true } },
+    { "nombre": "factor negativo", "entrada": { "utmFactor": -3, "utmValor": 70000 }, "esperado": { "error": true } },
+    { "nombre": "utm cero", "entrada": { "utmFactor": 3, "utmValor": 0 }, "esperado": { "error": true } },
+    { "nombre": "utm negativa", "entrada": { "utmFactor": 3, "utmValor": -70000 }, "esperado": { "error": true } }
+  ]
+}

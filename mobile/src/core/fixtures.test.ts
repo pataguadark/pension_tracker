@@ -10,6 +10,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
+import { calcularCuotaPactada, calcularDesbalanceMensual } from './calculos';
 import { fmtFactor, formatearPesos, limpiarEntero, limpiarFactor } from './formatters';
 
 const AQUI = dirname(fileURLToPath(import.meta.url));
@@ -103,5 +104,32 @@ describe('fmtFactor contra fixtures', () => {
 describe('formatearPesos contra fixtures', () => {
   it.each(obtenerCasos(formatters, 'formatearPesos'))('$nombre', ({ entrada, esperado }) => {
     expect(formatearPesos(entrada as number)).toBe(esperado);
+  });
+});
+
+const cuotaPactada = cargar('cuota-pactada.json') as unknown as { casos: Caso[] };
+const desbalanceMensual = cargar('desbalance-mensual.json') as unknown as { casos: Caso[] };
+
+describe('calcularCuotaPactada contra fixtures', () => {
+  it.each(cuotaPactada.casos)('$nombre', ({ entrada, esperado }) => {
+    const { utmFactor, utmValor } = entrada as { utmFactor: number; utmValor: number };
+    if (esperaError(esperado)) {
+      expect(() => calcularCuotaPactada(utmFactor, utmValor)).toThrow();
+    } else {
+      expect(calcularCuotaPactada(utmFactor, utmValor)).toBeCloseTo(esperado as number, 6);
+    }
+  });
+});
+
+describe('calcularDesbalanceMensual contra fixtures', () => {
+  it.each(desbalanceMensual.casos)('$nombre', ({ entrada, esperado }) => {
+    const { montoPagado, cuotaPactada: cuota } = entrada as {
+      montoPagado: number;
+      cuotaPactada: number;
+    };
+    const obtenido = calcularDesbalanceMensual(montoPagado, cuota);
+    const esp = esperado as { diferencia: number; estado: string };
+    expect(obtenido.diferencia).toBeCloseTo(esp.diferencia, 6);
+    expect(obtenido.estado).toBe(esp.estado);
   });
 });

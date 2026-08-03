@@ -15,7 +15,11 @@ from pathlib import Path
 import pytest
 
 from pensiontracker.formatters import fmt_factor, limpiar_entero, limpiar_factor
-from pensiontracker.services.calculation_service import formatear_pesos
+from pensiontracker.services.calculation_service import (
+    calcular_cuota_pactada,
+    calcular_desbalance_mensual,
+    formatear_pesos,
+)
 
 FIXTURES = Path(__file__).resolve().parent.parent / "shared" / "fixtures"
 
@@ -110,3 +114,25 @@ def test_formatters_json_trae_las_claves_esperadas_con_casos(clave):
         datos[clave], list
     ), f'La clave "{clave}" en formatters.json debería ser una lista de casos'
     assert len(datos[clave]) > 0, f'El bloque "{clave}" en formatters.json está vacío'
+
+
+def casos_simples(nombre_archivo: str) -> list:
+    datos = cargar(nombre_archivo)
+    return [(c["nombre"], c["entrada"], c["esperado"]) for c in datos["casos"]]
+
+
+@pytest.mark.parametrize("nombre,entrada,esperado", casos_simples("cuota-pactada.json"))
+def test_cuota_pactada_contra_fixtures(nombre, entrada, esperado):
+    if espera_error(esperado):
+        with pytest.raises(ValueError):
+            calcular_cuota_pactada(entrada["utmFactor"], entrada["utmValor"])
+    else:
+        obtenido = calcular_cuota_pactada(entrada["utmFactor"], entrada["utmValor"])
+        assert obtenido == pytest.approx(esperado)
+
+
+@pytest.mark.parametrize("nombre,entrada,esperado", casos_simples("desbalance-mensual.json"))
+def test_desbalance_mensual_contra_fixtures(nombre, entrada, esperado):
+    obtenido = calcular_desbalance_mensual(entrada["montoPagado"], entrada["cuotaPactada"])
+    assert obtenido["diferencia"] == pytest.approx(esperado["diferencia"])
+    assert obtenido["estado"] == esperado["estado"]
