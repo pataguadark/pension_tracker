@@ -9,6 +9,8 @@ mutadores rechazan GET.
 from datetime import datetime
 from unittest.mock import Mock
 
+import pytest
+
 from pensiontracker import create_app
 from pensiontracker.database import db_manager
 from pensiontracker.services import utm_service
@@ -48,6 +50,24 @@ def test_registro_valido_crea_pago_y_aparece_en_historial(client):
     resp = _registrar_pago(client)
     assert resp.status_code == 200
     assert b"213.588" in resp.data
+
+
+def test_registro_con_punto_decimal_en_factor_no_decuplica_la_cuota(client):
+    """
+    Extremo a extremo (cableado completo POST /registro → BD): el bug
+    original convertía '3.5' en 35 al descartar el punto como separador
+    decimal, decuplicando cuota_pactada. Postea con punto y verifica que
+    la cuota guardada corresponde a factor 3,5, no a 35.
+    """
+    resp = _registrar_pago(client, utm_factor="3.5", utm_valor="69.889")
+    assert resp.status_code == 200
+
+    pago = db_manager.obtener_pago_por_id(1)
+    assert pago is not None
+    assert pago["utm_factor"] == pytest.approx(3.5)
+    assert pago["cuota_pactada"] == pytest.approx(3.5 * 69889, abs=0.01)
+    # Guarda contra la regresión: no debe haberse colado el valor decuplicado.
+    assert pago["cuota_pactada"] != pytest.approx(35 * 69889, abs=0.01)
 
 
 def test_historial_vacio_muestra_estado_vacio(client):
