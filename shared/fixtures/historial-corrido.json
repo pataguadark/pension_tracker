@@ -35,6 +35,22 @@
       ]
     },
     {
+      "nombre": "pagos entrelazados de dos anios se ordenan por anio, no solo por mes",
+      "entrada": {
+        "utmValorActual": 70000,
+        "pagos": [
+          { "mesPago": 11, "anioPago": 2024, "utmFactor": 3.0, "utmValor": 66566, "cuotaPactada": 199698.0, "montoPagado": 199698, "desbalance": 0.0 },
+          { "mesPago": 1, "anioPago": 2025, "utmFactor": 3.0, "utmValor": 67294, "cuotaPactada": 201882.0, "montoPagado": 200000, "desbalance": -1882.0 },
+          { "mesPago": 2, "anioPago": 2024, "utmFactor": 3.0, "utmValor": 66000, "cuotaPactada": 198000.0, "montoPagado": 210000, "desbalance": 12000.0 }
+        ]
+      },
+      "esperado": [
+        { "mesPago": 1, "desbalanceCorrido": 10118.0, "estadoCorrido": "EXCEDENTE", "desbalanceUtmMesPesos": -1957.68, "desbalanceUtmCorridoPesos": 10769.59, "estadoUtmMes": "DEUDA", "estadoUtmCorrido": "EXCEDENTE" },
+        { "mesPago": 11, "desbalanceCorrido": 12000.0, "estadoCorrido": "EXCEDENTE", "desbalanceUtmMesPesos": 0.0, "desbalanceUtmCorridoPesos": 12727.27, "estadoUtmMes": "EXACTO", "estadoUtmCorrido": "EXCEDENTE" },
+        { "mesPago": 2, "desbalanceCorrido": 12000.0, "estadoCorrido": "EXCEDENTE", "desbalanceUtmMesPesos": 12727.27, "desbalanceUtmCorridoPesos": 12727.27, "estadoUtmMes": "EXCEDENTE", "estadoUtmCorrido": "EXCEDENTE" }
+      ]
+    },
+    {
       "nombre": "sin UTM de referencia los campos en pesos quedan nulos",
       "entrada": {
         "utmValorActual": null,
