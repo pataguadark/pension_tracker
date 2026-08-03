@@ -1,0 +1,45 @@
+{
+  "descripcion": "Parsing y formateo de números en formato chileno. Verificado en paralelo por pytest y vitest.",
+  "limpiarFactor": [
+    { "nombre": "coma decimal", "entrada": "3,0561", "esperado": 3.0561 },
+    { "nombre": "punto decimal", "entrada": "3.0561", "esperado": 3.0561 },
+    { "nombre": "entero sin separador", "entrada": "3", "esperado": 3 },
+    { "nombre": "un separador con tres digitos es decimal", "entrada": "1.234", "esperado": 1.234 },
+    { "nombre": "miles con punto y decimal con coma", "entrada": "1.234,56", "esperado": 1234.56 },
+    { "nombre": "miles con coma y decimal con punto", "entrada": "1,234.56", "esperado": 1234.56 },
+    { "nombre": "separador final suelto", "entrada": "3,5.", "esperado": 3.5 },
+    { "nombre": "separador final suelto invertido", "entrada": "3.5,", "esperado": 3.5 },
+    { "nombre": "sin parte entera", "entrada": ".5", "esperado": 0.5 },
+    { "nombre": "cadena vacia", "entrada": "", "esperado": { "error": true } },
+    { "nombre": "solo espacios", "entrada": "   ", "esperado": { "error": true } },
+    { "nombre": "texto", "entrada": "abc", "esperado": { "error": true } },
+    { "nombre": "no finito nan", "entrada": "nan", "esperado": { "error": true } },
+    { "nombre": "no finito inf", "entrada": "inf", "esperado": { "error": true } },
+    { "nombre": "notacion cientifica", "entrada": "1e10", "esperado": { "error": true } },
+    { "nombre": "notacion cientifica con decimal", "entrada": "3.5e2", "esperado": { "error": true } },
+    { "nombre": "signo mas explicito", "entrada": "+3,5", "esperado": { "error": true } },
+    { "nombre": "negativo se parsea, lo rechaza la validacion de la ruta", "entrada": "-3,5", "esperado": -3.5 }
+  ],
+  "limpiarEntero": [
+    { "nombre": "miles con punto", "entrada": "69.889", "esperado": 69889 },
+    { "nombre": "sin separador", "entrada": "1000", "esperado": 1000 },
+    { "nombre": "con espacios", "entrada": " 200.000 ", "esperado": 200000 },
+    { "nombre": "rechaza coma decimal", "entrada": "1,5", "esperado": { "error": true } },
+    { "nombre": "cadena vacia", "entrada": "", "esperado": { "error": true } }
+  ],
+  "fmtFactor": [
+    { "nombre": "cuatro decimales", "entrada": 3.0561, "esperado": "3,0561" },
+    { "nombre": "entero sin ceros de mas", "entrada": 3, "esperado": "3" },
+    { "nombre": "un decimal", "entrada": 3.5, "esperado": "3,5" },
+    { "nombre": "nulo", "entrada": null, "esperado": "" }
+  ],
+  "formatearPesos": [
+    { "nombre": "redondea hacia arriba", "entrada": 68923.5, "esperado": "$68.924" },
+    { "nombre": "miles con punto", "entrada": 5898, "esperado": "$5.898" },
+    { "nombre": "cero", "entrada": 0, "esperado": "$0" },
+    { "nombre": "negativo con miles", "entrada": -5898, "esperado": "$-5.898" },
+    { "nombre": "negativo que redondea a cero conserva el signo", "entrada": -0.25, "esperado": "$-0" },
+    { "nombre": "negativo en el limite del empate", "entrada": -0.5, "esperado": "$-0" },
+    { "nombre": "negativo justo pasado el empate", "entrada": -0.51, "esperado": "$-1" }
+  ]
+}
