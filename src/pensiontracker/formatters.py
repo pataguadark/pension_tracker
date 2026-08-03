@@ -7,6 +7,9 @@ routes/utm.py).
 """
 
 import math
+import re
+
+_FACTOR_VALIDO = re.compile(r"^-?\d*\.?\d+$")
 
 
 def limpiar_entero(valor: str) -> int:
@@ -61,6 +64,13 @@ def limpiar_factor(valor: str) -> float:
 
     entero = entero.replace(".", "").replace(",", "")
     normalizado = f"{entero}.{decimales}" if decimales else entero
+
+    # float() acepta notación científica ('1e10'), signo '+' y 'nan'/'inf',
+    # pero un factor UTM no admite ninguna de esas formas en la realidad.
+    # Se exige la misma forma estricta que el TypeScript (^-?\d*\.?\d+$)
+    # antes de convertir, para que ambos lados rechacen igual.
+    if not _FACTOR_VALIDO.match(normalizado):
+        raise ValueError(f"Factor UTM inválido: {valor!r}")
 
     try:
         resultado = float(normalizado)

@@ -4,6 +4,17 @@
  *
  * Port de src/pensiontracker/formatters.py. Debe mantenerse en paridad
  * con esa implementación; las fixtures doradas verifican ambas.
+ *
+ * ## Diferencias conocidas y deliberadas
+ *
+ * - `fmtFactor(-0)` da `"0"` aquí y `"-0"` en Python: inalcanzable en la
+ *   práctica porque el factor UTM siempre se valida positivo (> 0) antes
+ *   de llegar a formatearse, así que nunca se formatea un -0.
+ * - `redondear(NaN)` / `redondear(Infinity)` lanzan excepción aquí,
+ *   mientras que `round()` de Python los devuelve tal cual: el
+ *   guardarraíl es intencional y también inalcanzable, porque
+ *   `limpiarFactor` rechaza los valores no finitos antes de que lleguen
+ *   a redondear.
  */
 
 /**
@@ -87,7 +98,10 @@ export function fmtFactor(n: number | null | undefined): string {
 /** Formatea un monto como moneda chilena: 68923.5 → '$68.924'. */
 export function formatearPesos(monto: number): string {
   const entero = redondearAEntero(monto);
-  const signo = entero < 0 ? '-' : '';
+  // El signo sale del monto original y no del entero redondeado: Python
+  // conserva el "-" aunque la magnitud redondee a cero ("$-0"), y la
+  // paridad con el escritorio manda sobre la estética.
+  const signo = monto < 0 || Object.is(monto, -0) ? '-' : '';
   const digitos = Math.abs(entero).toString();
   const conPuntos = digitos.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
   return `$${signo}${conPuntos}`;

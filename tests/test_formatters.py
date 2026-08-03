@@ -9,6 +9,7 @@ así que aceptarlo no es una comodidad sino un requisito.
 import pytest
 
 from pensiontracker.formatters import fmt_factor, limpiar_entero, limpiar_factor
+from pensiontracker.services.calculation_service import formatear_pesos
 
 
 # ----------------------------------------------------------------
@@ -79,6 +80,18 @@ def test_limpiar_factor_rechaza_no_finitos(entrada):
         limpiar_factor(entrada)
 
 
+@pytest.mark.parametrize("entrada", ["1e10", "3.5e2", "+3,5"])
+def test_limpiar_factor_rechaza_notacion_cientifica_y_signo_mas(entrada):
+    """
+    Regresión: un factor UTM en notación científica no existe en la
+    realidad ('3e5' llegaba a pasar la validación factor > 0 de
+    routes/pagos.py y quedaba persistido). TypeScript ya era estricto
+    (regex ^-?\\d*\\.?\\d+$); Python se alinea acá.
+    """
+    with pytest.raises(ValueError):
+        limpiar_factor(entrada)
+
+
 def test_limpiar_factor_doble_separador_sin_sufijo():
     """
     Documenta el resultado de '3,,5' bajo la regla acordada: el último
@@ -128,3 +141,25 @@ def test_factor_sobrevive_ida_y_vuelta(texto):
     """fmt_factor(limpiar_factor(x)) debe poder volver a leerse igual."""
     valor = limpiar_factor(texto)
     assert limpiar_factor(fmt_factor(valor)) == pytest.approx(valor)
+
+
+# ----------------------------------------------------------------
+# formatear_pesos (calculation_service): tabla de paridad con TypeScript
+# ----------------------------------------------------------------
+# Python es la implementación de referencia. Estos valores esperados
+# salieron de ejecutar formatear_pesos directamente, no de criterio propio.
+# formatearPesos en mobile/src/core/formatters.ts debe igualar esta tabla,
+# incluido el signo conservado en montos que redondean a magnitud cero.
+
+@pytest.mark.parametrize("entrada,esperado", [
+    (-0.01, "$-0"),
+    (-0.25, "$-0"),
+    (-0.5,  "$-0"),
+    (-0.51, "$-1"),
+    (-1,    "$-1"),
+    (0,     "$0"),
+    (-5898, "$-5.898"),
+    (5898,  "$5.898"),
+])
+def test_formatear_pesos_conserva_signo_cerca_de_cero(entrada, esperado):
+    assert formatear_pesos(entrada) == esperado

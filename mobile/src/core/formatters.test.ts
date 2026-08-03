@@ -28,6 +28,12 @@ describe('limpiarFactor', () => {
       expect(() => limpiarFactor(entrada)).toThrow();
     },
   );
+
+  // Regresión: notación científica y signo '+' no son formas válidas de un
+  // factor UTM. Fija el comportamiento estricto que Python debe igualar.
+  it.each(['+3,5', '1e10', '3.5e2'])('rechaza notación científica y signo +: %s', (entrada) => {
+    expect(() => limpiarFactor(entrada)).toThrow();
+  });
 });
 
 describe('limpiarEntero', () => {
@@ -63,6 +69,20 @@ describe('formatearPesos', () => {
     [0, '$0'],
     [-5898, '$-5.898'],
   ])('formatea %s como %s', (entrada, esperado) => {
+    expect(formatearPesos(entrada)).toBe(esperado);
+  });
+
+  // Regresión: montos negativos que redondean en magnitud a cero deben
+  // conservar el signo, igual que Python ("$-0"). Tabla generada
+  // ejecutando formatear_pesos de Python (implementación de referencia).
+  it.each([
+    [-0.01, '$-0'],
+    [-0.25, '$-0'],
+    [-0.5, '$-0'],
+    [-0.51, '$-1'],
+    [-5898, '$-5.898'],
+    [0, '$0'],
+  ])('formatea %s como %s (paridad con Python)', (entrada, esperado) => {
     expect(formatearPesos(entrada)).toBe(esperado);
   });
 });
