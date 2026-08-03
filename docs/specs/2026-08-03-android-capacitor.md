@@ -31,6 +31,17 @@ la v1 apunta a paridad y no a un mínimo viable.
 Play Store, iOS, y sincronización automática entre dispositivos. El intercambio
 entre escritorio y teléfono se resuelve con el archivo `.db` (sección 4).
 
+### Prerrequisito: Etapa 0
+
+Al preparar el port se encontró que `limpiar_factor()` descarta el punto como
+separador decimal, de modo que `'3.5'` se convierte en `35` y decuplica la cuota
+pactada. En Android eso pasaría de tropiezo ocasional a camino más probable,
+porque los teclados decimales de celular suelen ofrecer punto y no coma.
+
+Se corrige **antes** de portar, para que las fixtures doradas de la sección 6
+codifiquen el comportamiento correcto y no congelen el error en los dos
+lenguajes. Ver `docs/plans/2026-08-03-etapa-0-separador-decimal.md`.
+
 ---
 
 ## 2. Por qué Capacitor no es "empaquetar lo que ya existe"
