@@ -20,7 +20,12 @@ function formatearFactor(input) {
     const partes = val.split(',');
     if (partes.length > 2) {
         // Varios separadores: el último manda, los anteriores eran de miles.
-        val = partes.slice(0, -1).join('') + ',' + partes[partes.length - 1];
+        if (partes[partes.length - 1] === '') {
+            // Separador suelto al final: se ignora, el anterior sigue siendo el decimal.
+            val = partes[0] + ',' + partes.slice(1).join('');
+        } else {
+            val = partes.slice(0, -1).join('') + ',' + partes[partes.length - 1];
+        }
     }
 
     const [entero, decimales] = val.split(',');
