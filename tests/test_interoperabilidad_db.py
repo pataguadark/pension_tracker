@@ -21,6 +21,7 @@ from pathlib import Path
 import pytest
 
 from pensiontracker.database import db_manager
+from tests.test_fixtures_doradas import TOLERANCIA_ABSOLUTA_PARIDAD_TS
 
 RAIZ = Path(__file__).resolve().parent.parent
 MOBILE = RAIZ / "mobile"
@@ -155,10 +156,55 @@ PAGOS_SINTETICOS = [
     # calculan a mano: los produce en tiempo de ejecución
     # calculation_service (la referencia), tanto para el resumen como
     # para el historial (ver test_los_calculos_coinciden_sobre_la_misma_base).
+    #
+    # Continuación de la tarea 5: el mismo hueco reaparecía en la columna
+    # "Valor UTM" del historial (desbalance_utm_mes_pesos /
+    # desbalance_utm_corrido_pesos, líneas 243-244 de calculos.ts) por DOS
+    # motivos que había que atacar juntos, no uno solo:
+    #
+    #   1. desbalance_utm_mes_pesos ni siquiera se leía del lado
+    #      TypeScript en _leer_con_typescript(): un mutante que le
+    #      quitara el redondeo no podía detectarse porque el campo no se
+    #      comparaba con nada. Se agregó a la proyección del historial.
+    #   2. Las comparaciones usaban pytest.approx(...) sin tolerancia
+    #      explícita (rel=1e-6 por defecto). Con montos del orden de
+    #      miles de pesos, la diferencia entre redondear y no redondear a
+    #      2 decimales (a lo sumo 0.005) puede caer por debajo de esa
+    #      tolerancia relativa y pasar inadvertida — es el mismo problema
+    #      que TOLERANCIA_ABSOLUTA_PARIDAD_TS ya resuelve en
+    #      test_fixtures_doradas.py. Se reutiliza esa misma constante acá
+    #      en vez de inventar otra, para no reabrir la asimetría de
+    #      sensibilidad entre las dos suites que ese comentario describe.
+    #
+    # Con esos dos cambios, los pagos de enero y marzo de 2025 ya bastan
+    # para delatar el mutante: el producto diferencia_en_UTM × utm_vigente
+    # de esas filas no cae en un número entero de pesos, así que redondear
+    # o no cambia el resultado en varios milésimos — muy por encima de
+    # 5e-11. (Los pagos de febrero-2025 y noviembre-2024 dan diferencia_en_
+    # UTM exactamente 0 -su monto_pagado es un múltiplo exacto de
+    # utm_valor- así que no discriminan este mutante en particular, pero
+    # siguen siendo necesarios para los otros casos descritos arriba.)
+    #
+    # Al verificar los cuatro mutantes de la tarea 5 (líneas 225, 243, 244
+    # y 279 de calculos.ts) se encontró que, con solo estas cuatro filas,
+    # el mutante de la línea 279 (redondeo del `desbalanceAcumulado` del
+    # RESUMEN, no del historial corrido) tampoco se detectaba: los
+    # milésimos de -1881.995/+0.005 se cancelan exactamente entre sí, y lo
+    # mismo pasa con +5898.505/-0.005, así que la suma cruda de los cuatro
+    # desbalances cae EXACTAMENTE en 4016.51 (bit a bit igual a su versión
+    # redondeada) -no es cosa de tolerancia, sino que no hay ninguna
+    # diferencia que detectar-. El pago de abril-2025 rompe esa
+    # cancelación: su desbalance (-0.123) no tiene contrapartida que lo
+    # anule en la suma total, así que la suma cruda de las cinco filas
+    # (4016.387) difiere de su versión redondeada (4016.39) en ~0.003,
+    # muy por encima de TOLERANCIA_ABSOLUTA_PARIDAD_TS. Se agrega DESPUÉS
+    # de noviembre-2024 en el orden cronológico para no alterar el empate
+    # de redondeo que ese pago fija como el primero acumulado.
     (1, 2025, 67294, 201881.995, 200000, -1881.995, 3.0),
     (2, 2025, 67429, 202286.995, 202287, 0.005, 3.0),
     (3, 2025, 68034, 204101.495, 210000, 5898.505, 3.0),
     (11, 2024, 66000, 198000.005, 198000, -0.005, 3.0),  # año distinto: cubre el orden
+    (4, 2025, 68350, 205000.123, 205000, -0.123, 3.0),
 ]
 
 
@@ -183,7 +229,8 @@ def _leer_con_typescript(ruta_db: Path) -> dict:
         "  pagos: pagos.map(p => [p.anioPago, p.mesPago, p.montoPagado, p.desbalance, p.utmFactor]),\n"
         "  resumen: resumirEstadoCuenta(pagos),\n"
         "  historial: obtenerHistorialDesbalances(pagos, 70000)\n"
-        "    .map(f => [f.anioPago, f.mesPago, f.desbalanceCorrido, f.desbalanceUtmCorridoPesos]),\n"
+        "    .map(f => [f.anioPago, f.mesPago, f.desbalanceCorrido,\n"
+        "               f.desbalanceUtmMesPesos, f.desbalanceUtmCorridoPesos]),\n"
         "  ultimoFactor: await utm.obtenerUltimoFactorUtm(),\n"
         "};\n"
         "console.log('__JSON__' + JSON.stringify(salida)); e.cerrar();\n"
@@ -239,20 +286,25 @@ def test_los_calculos_coinciden_sobre_la_misma_base(db_del_escritorio, monkeypat
     historial_py = calculation_service.obtener_historial_desbalances(70000, pagos_py)
 
     assert visto["resumen"]["cantidadPagos"] == resumen_py["cantidad_pagos"]
-    assert visto["resumen"]["totalPagado"] == pytest.approx(resumen_py["total_pagado"])
+    assert visto["resumen"]["totalPagado"] == pytest.approx(
+        resumen_py["total_pagado"], abs=TOLERANCIA_ABSOLUTA_PARIDAD_TS)
     assert visto["resumen"]["desbalanceAcumulado"] == pytest.approx(
-        resumen_py["desbalance_acumulado"])
+        resumen_py["desbalance_acumulado"], abs=TOLERANCIA_ABSOLUTA_PARIDAD_TS)
     assert visto["resumen"]["estado"] == resumen_py["estado"]
 
     assert len(visto["historial"]) == len(historial_py)
     for fila_ts, fila_py in zip(visto["historial"], historial_py):
         assert fila_ts[0] == fila_py["anio_pago"]
         assert fila_ts[1] == fila_py["mes_pago"]
-        assert fila_ts[2] == pytest.approx(fila_py["desbalance_corrido"])
-        assert fila_ts[3] == pytest.approx(fila_py["desbalance_utm_corrido_pesos"])
+        assert fila_ts[2] == pytest.approx(
+            fila_py["desbalance_corrido"], abs=TOLERANCIA_ABSOLUTA_PARIDAD_TS)
+        assert fila_ts[3] == pytest.approx(
+            fila_py["desbalance_utm_mes_pesos"], abs=TOLERANCIA_ABSOLUTA_PARIDAD_TS)
+        assert fila_ts[4] == pytest.approx(
+            fila_py["desbalance_utm_corrido_pesos"], abs=TOLERANCIA_ABSOLUTA_PARIDAD_TS)
 
     assert visto["ultimoFactor"] == pytest.approx(
-        db_manager.obtener_ultimo_factor_utm())
+        db_manager.obtener_ultimo_factor_utm(), abs=TOLERANCIA_ABSOLUTA_PARIDAD_TS)
 
 
 def test_el_escritorio_lee_los_pagos_que_escribio_typescript(db_del_movil, monkeypatch):
