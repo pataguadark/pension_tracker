@@ -45,6 +45,49 @@ def test_limpiar_factor_rechaza_entradas_invalidas(entrada):
         limpiar_factor(entrada)
 
 
+@pytest.mark.parametrize("entrada,esperado", [
+    ("3,5.",    3.5),
+    ("3.5,",    3.5),
+    ("3,0561.", 3.0561),
+    ("3,",      3.0),
+])
+def test_limpiar_factor_separador_final_suelto_no_decuplica(entrada, esperado):
+    """
+    Regresión C1: un separador final sin dígitos detrás (ej. '3,5.') no debe
+    tratarse como el separador decimal (que dejaría la parte decimal vacía y
+    descartaría el punto/coma anterior, que sí era el decimal). Se ignora y
+    el separador previo sigue siendo el decimal.
+    """
+    assert limpiar_factor(entrada) == pytest.approx(esperado)
+
+
+@pytest.mark.parametrize("entrada", [",", ".", ",,", "..", " . , "])
+def test_limpiar_factor_solo_separadores_es_invalido(entrada):
+    """Si tras descartar los separadores finales sueltos no queda nada, es inválido."""
+    with pytest.raises(ValueError):
+        limpiar_factor(entrada)
+
+
+@pytest.mark.parametrize("entrada", ["nan", "NaN", "inf", "-inf", "Infinity", "-Infinity"])
+def test_limpiar_factor_rechaza_no_finitos(entrada):
+    """
+    I2: float() acepta 'nan'/'inf' como valores válidos, pero un factor UTM
+    no finito no tiene sentido de negocio y no debe poder persistirse.
+    """
+    with pytest.raises(ValueError):
+        limpiar_factor(entrada)
+
+
+def test_limpiar_factor_doble_separador_sin_sufijo():
+    """
+    Documenta el resultado de '3,,5' bajo la regla acordada: el último
+    separador presente (la segunda coma) es el decimal, así que da 3.5.
+    Antes solo estaba cubierto '3,,5x', donde el rechazo lo provoca la 'x',
+    no el doble separador en sí.
+    """
+    assert limpiar_factor("3,,5") == pytest.approx(3.5)
+
+
 # ----------------------------------------------------------------
 # limpiar_entero
 # ----------------------------------------------------------------

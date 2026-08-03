@@ -6,6 +6,8 @@ decimales con coma). Compartido entre blueprints (routes/pagos.py,
 routes/utm.py).
 """
 
+import math
+
 
 def limpiar_entero(valor: str) -> int:
     """
@@ -42,6 +44,15 @@ def limpiar_factor(valor: str) -> float:
     if not limpio:
         raise ValueError("Valor vacío")
 
+    # Un separador final sin dígitos detrás (ej. '3,5.') no es el decimal:
+    # tratarlo como tal dejaría la parte decimal vacía y descartaría el
+    # separador anterior, que sí lo era, decuplicando el resultado. Se
+    # ignora y el separador previo (si existe) sigue siendo el decimal.
+    while limpio and limpio[-1] in ".,":
+        limpio = limpio[:-1]
+    if not limpio:
+        raise ValueError(f"Factor UTM inválido: {valor!r}")
+
     corte = max(limpio.rfind("."), limpio.rfind(","))
     if corte == -1:
         entero, decimales = limpio, ""
@@ -52,9 +63,14 @@ def limpiar_factor(valor: str) -> float:
     normalizado = f"{entero}.{decimales}" if decimales else entero
 
     try:
-        return float(normalizado)
+        resultado = float(normalizado)
     except ValueError:
         raise ValueError(f"Factor UTM inválido: {valor!r}")
+
+    if not math.isfinite(resultado):
+        raise ValueError(f"Factor UTM inválido: {valor!r}")
+
+    return resultado
 
 
 def fmt_factor(n):
