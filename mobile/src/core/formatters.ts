@@ -17,6 +17,8 @@
  *   a redondear.
  */
 
+import { redondear } from './redondeo';
+
 /**
  * Convierte texto de factor UTM a número.
  *
@@ -97,7 +99,11 @@ export function fmtFactor(n: number | null | undefined): string {
 
 /** Formatea un monto como moneda chilena: 68923.5 → '$68.924'. */
 export function formatearPesos(monto: number): string {
-  const entero = redondearAEntero(monto);
+  // redondear() mira la expansión decimal exacta del double en vez de
+  // restar el piso y comparar contra 0.5: ese atajo fabrica empates que
+  // no existen (ver el comentario de redondeo.ts) y hace divergir el
+  // resultado de Python en valores como 1.4999999999999998.
+  const entero = redondear(monto, 0);
   // El signo sale del monto original y no del entero redondeado: Python
   // conserva el "-" aunque la magnitud redondee a cero ("$-0"), y la
   // paridad con el escritorio manda sobre la estética.
@@ -105,13 +111,4 @@ export function formatearPesos(monto: number): string {
   const digitos = Math.abs(entero).toString();
   const conPuntos = digitos.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
   return `$${signo}${conPuntos}`;
-}
-
-function redondearAEntero(monto: number): number {
-  // Igual que "{:,.0f}" de Python: empates al par.
-  const abajo = Math.floor(monto);
-  const resto = Number((monto - abajo).toPrecision(15));
-  if (resto > 0.5) return abajo + 1;
-  if (resto < 0.5) return abajo;
-  return abajo % 2 === 0 ? abajo : abajo + 1;
 }
