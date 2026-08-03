@@ -48,7 +48,15 @@ def calcular_cuota_pactada(utm_factor: float, utm_valor: float) -> float:
     if not (utm_valor > 0) or not math.isfinite(utm_valor):
         raise ValueError("El valor de la UTM debe ser un número positivo y finito.")
 
-    return round(utm_factor * utm_valor, 2)
+    resultado = round(utm_factor * utm_valor, 2)
+    # utm_factor y utm_valor finitos no garantizan que su producto lo sea
+    # (overflow de double): sin este guard, una cuota infinita pasaría de
+    # largo y terminaría persistida en la BD, tal como advierte el
+    # comentario de arriba. El TypeScript ya lanza acá porque redondear()
+    # rechaza los no finitos.
+    if not math.isfinite(resultado):
+        raise ValueError("La cuota pactada calculada no es un valor finito.")
+    return resultado
 
 
 # -------------------------------------------------------------------

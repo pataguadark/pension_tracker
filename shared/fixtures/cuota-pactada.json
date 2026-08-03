@@ -13,6 +13,7 @@
     { "nombre": "factor NaN", "entrada": { "utmFactor": "NaN", "utmValor": 70000 }, "esperado": { "error": true } },
     { "nombre": "factor infinito", "entrada": { "utmFactor": "Infinity", "utmValor": 70000 }, "esperado": { "error": true } },
     { "nombre": "utm NaN", "entrada": { "utmFactor": 3, "utmValor": "NaN" }, "esperado": { "error": true } },
-    { "nombre": "utm infinita", "entrada": { "utmFactor": 3, "utmValor": "Infinity" }, "esperado": { "error": true } }
+    { "nombre": "utm infinita", "entrada": { "utmFactor": 3, "utmValor": "Infinity" }, "esperado": { "error": true } },
+    { "nombre": "producto desborda a infinito aunque ambos factores sean finitos", "entrada": { "utmFactor": 1e308, "utmValor": 1e308 }, "esperado": { "error": true } }
   ]
 }
