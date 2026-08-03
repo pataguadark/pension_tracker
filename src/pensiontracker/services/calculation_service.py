@@ -47,6 +47,7 @@ def calcular_cuota_pactada(utm_factor: float, utm_valor: float) -> float:
         raise ValueError("El factor UTM debe ser un número positivo y finito.")
     if not (utm_valor > 0) or not math.isfinite(utm_valor):
         raise ValueError("El valor de la UTM debe ser un número positivo y finito.")
+
     return round(utm_factor * utm_valor, 2)
 
 
@@ -308,36 +309,46 @@ def procesar_pago(utm_factor: float, utm_valor: float,
 # Utilidades de consulta para la UI
 # -------------------------------------------------------------------
 
-def obtener_estado_cuenta() -> dict:
+def resumir_estado_cuenta(pagos: list) -> dict:
     """
-    Retorna el estado de cuenta completo: todos los pagos + resumen acumulado.
-    Claves del resumen alineadas con historial.html:
+    Aritmética pura del resumen de estado de cuenta, recibiendo `pagos`
+    como parámetro (mismo patrón que obtener_historial_desbalances y
+    calcular_desbalance_acumulado_utm), para poder probarla directamente
+    contra las fixtures doradas sin montar una base de datos.
+
+    Claves alineadas con historial.html:
       cantidad_pagos, total_pagado, total_pactado, desbalance_acumulado, estado
     """
-    pagos = db_manager.obtener_todos_los_pagos()
-
     if not pagos:
-        resumen = {
+        return {
             "cantidad_pagos":       0,
             "total_pagado":         0.0,
             "total_pactado":        0.0,
             "desbalance_acumulado": 0.0,
             "estado":               "EXACTO",
         }
-    else:
-        total_pagado = round(sum(p["monto_pagado"] for p in pagos), 2)
-        total_pactado = round(sum(p["cuota_pactada"] for p in pagos), 2)
-        desbalance_acumulado = round(sum(p["desbalance"] for p in pagos), 2)
-        estado = ("EXCEDENTE" if desbalance_acumulado > 0
-                  else "DEUDA" if desbalance_acumulado < 0
-                  else "EXACTO")
-        resumen = {
-            "cantidad_pagos":       len(pagos),
-            "total_pagado":         total_pagado,
-            "total_pactado":        total_pactado,
-            "desbalance_acumulado": desbalance_acumulado,
-            "estado":               estado,
-        }
+
+    total_pagado = round(sum(p["monto_pagado"] for p in pagos), 2)
+    total_pactado = round(sum(p["cuota_pactada"] for p in pagos), 2)
+    desbalance_acumulado = round(sum(p["desbalance"] for p in pagos), 2)
+    estado = ("EXCEDENTE" if desbalance_acumulado > 0
+              else "DEUDA" if desbalance_acumulado < 0
+              else "EXACTO")
+    return {
+        "cantidad_pagos":       len(pagos),
+        "total_pagado":         total_pagado,
+        "total_pactado":        total_pactado,
+        "desbalance_acumulado": desbalance_acumulado,
+        "estado":               estado,
+    }
+
+
+def obtener_estado_cuenta() -> dict:
+    """
+    Retorna el estado de cuenta completo: todos los pagos + resumen acumulado.
+    """
+    pagos = db_manager.obtener_todos_los_pagos()
+    resumen = resumir_estado_cuenta(pagos)
 
     return {
         "pagos":   pagos,

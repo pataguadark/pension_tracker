@@ -22,6 +22,7 @@ from pensiontracker.services.calculation_service import (
     calcular_desbalance_utm_mensual,
     formatear_pesos,
     obtener_historial_desbalances,
+    resumir_estado_cuenta,
 )
 
 FIXTURES = Path(__file__).resolve().parent.parent / "shared" / "fixtures"
@@ -274,34 +275,22 @@ def test_historial_corrido_contra_fixtures(nombre, entrada, esperado):
 
 @pytest.mark.parametrize("nombre,entrada,esperado", casos("historial-corrido.json", "resumen"))
 def test_resumen_estado_cuenta_contra_fixtures(nombre, entrada, esperado):
-    """El resumen del Python vive en obtener_estado_cuenta(), que consulta la BD.
-    Se replica acá la aritmética que esa función aplica sobre la lista de pagos."""
+    """El resumen del Python vive en obtener_estado_cuenta(), que llama a
+    resumir_estado_cuenta() tras leer de la BD. Se invoca acá directamente
+    la función pura de producción (mismo patrón que hace resumirEstadoCuenta
+    del lado TypeScript), en vez de reimplementar la aritmética en el test."""
     pagos = [a_snake(p) for p in entrada["pagos"]]
 
-    if not pagos:
-        obtenido = {
-            "cantidadPagos": 0, "totalPagado": 0.0, "totalPactado": 0.0,
-            "desbalanceAcumulado": 0.0, "estado": "EXACTO",
-        }
-    else:
-        desbalance = round(sum(p["desbalance"] for p in pagos), 2)
-        obtenido = {
-            "cantidadPagos": len(pagos),
-            "totalPagado": round(sum(p["monto_pagado"] for p in pagos), 2),
-            "totalPactado": round(sum(p["cuota_pactada"] for p in pagos), 2),
-            "desbalanceAcumulado": desbalance,
-            "estado": ("EXCEDENTE" if desbalance > 0
-                       else "DEUDA" if desbalance < 0 else "EXACTO"),
-        }
+    obtenido = resumir_estado_cuenta(pagos)
 
-    assert obtenido["cantidadPagos"] == esperado["cantidadPagos"]
-    assert obtenido["totalPagado"] == pytest.approx(
+    assert obtenido["cantidad_pagos"] == esperado["cantidadPagos"]
+    assert obtenido["total_pagado"] == pytest.approx(
         esperado["totalPagado"], abs=TOLERANCIA_ABSOLUTA_PARIDAD_TS
     )
-    assert obtenido["totalPactado"] == pytest.approx(
+    assert obtenido["total_pactado"] == pytest.approx(
         esperado["totalPactado"], abs=TOLERANCIA_ABSOLUTA_PARIDAD_TS
     )
-    assert obtenido["desbalanceAcumulado"] == pytest.approx(
+    assert obtenido["desbalance_acumulado"] == pytest.approx(
         esperado["desbalanceAcumulado"], abs=TOLERANCIA_ABSOLUTA_PARIDAD_TS
     )
     assert obtenido["estado"] == esperado["estado"]
