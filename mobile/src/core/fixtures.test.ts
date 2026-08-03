@@ -10,8 +10,14 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-import { calcularCuotaPactada, calcularDesbalanceMensual } from './calculos';
+import {
+  calcularCuotaPactada,
+  calcularDesbalanceAcumuladoUtm,
+  calcularDesbalanceMensual,
+  calcularDesbalanceUtmMensual,
+} from './calculos';
 import { fmtFactor, formatearPesos, limpiarEntero, limpiarFactor } from './formatters';
+import type { Pago } from './tipos';
 
 const AQUI = dirname(fileURLToPath(import.meta.url));
 const FIXTURES = resolve(AQUI, '../../../shared/fixtures');
@@ -151,6 +157,47 @@ describe('calcularDesbalanceMensual contra fixtures', () => {
       const esp = esperado as { diferencia: number; estado: string };
       expect(obtenido.diferencia).toBeCloseTo(esp.diferencia, 10);
       expect(obtenido.estado).toBe(esp.estado);
+    }
+  });
+});
+
+const desbalanceUtm = cargar('desbalance-utm.json');
+
+// Nota: las fixtures del bloque `mensual` no traen las claves `mesPago`,
+// `anioPago` ni `desbalance`, porque calcularDesbalanceUtmMensual no las usa.
+// El `as unknown as Pago` es deliberado: obliga a que el test refleje
+// exactamente lo que la función necesita, sin inventar campos.
+describe('calcularDesbalanceUtmMensual contra fixtures', () => {
+  it.each(obtenerCasos(desbalanceUtm, 'mensual'))('$nombre', ({ entrada, esperado }) => {
+    const obtenido = calcularDesbalanceUtmMensual(entrada as unknown as Pago);
+    if (esperado === null) {
+      expect(obtenido).toBeNull();
+    } else {
+      expect(obtenido).toBeCloseTo(esperado as number, 10);
+    }
+  });
+});
+
+describe('calcularDesbalanceAcumuladoUtm contra fixtures', () => {
+  it.each(obtenerCasos(desbalanceUtm, 'acumulado'))('$nombre', ({ entrada, esperado }) => {
+    const { utmValorActual, pagos } = entrada as {
+      utmValorActual: number | null;
+      pagos: Pago[];
+    };
+    const obtenido = calcularDesbalanceAcumuladoUtm(utmValorActual, pagos);
+    const esp = esperado as {
+      desbalanceAcumuladoUtm: number;
+      desbalanceAjustado: number | null;
+      estado: string;
+    };
+
+    expect(obtenido.desbalanceAcumuladoUtm).toBeCloseTo(esp.desbalanceAcumuladoUtm, 10);
+    expect(obtenido.estado).toBe(esp.estado);
+
+    if (esp.desbalanceAjustado === null) {
+      expect(obtenido.desbalanceAjustado).toBeNull();
+    } else {
+      expect(obtenido.desbalanceAjustado).toBeCloseTo(esp.desbalanceAjustado, 10);
     }
   });
 });

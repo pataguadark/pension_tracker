@@ -11,7 +11,7 @@
  */
 
 import { redondear } from './redondeo';
-import type { Estado } from './tipos';
+import type { Estado, Pago } from './tipos';
 
 /** Determina el estado según el signo de un desbalance. */
 export function estadoDe(valor: number): Estado {
@@ -38,4 +38,58 @@ export function calcularDesbalanceMensual(
 ): { diferencia: number; estado: Estado } {
   const diferencia = redondear(montoPagado - cuotaPactada, 2);
   return { diferencia, estado: estadoDe(diferencia) };
+}
+
+/** Factor UTM de un pago: el guardado, o derivado de cuota / valor UTM. */
+export function factorDePago(pago: Pago): number | null {
+  if (pago.utmFactor) {
+    return pago.utmFactor;
+  }
+  if (pago.utmValor && pago.utmValor > 0) {
+    return pago.cuotaPactada / pago.utmValor;
+  }
+  return null;
+}
+
+/**
+ * Diferencia de un pago en unidades UTM, a la tasa de ese mes.
+ * Mismo signo que el desbalance en pesos. Null si faltan datos.
+ */
+export function calcularDesbalanceUtmMensual(pago: Pago): number | null {
+  const factor = factorDePago(pago);
+  if (factor === null || !pago.utmValor) {
+    return null;
+  }
+  return pago.montoPagado / pago.utmValor - factor;
+}
+
+/**
+ * Suma las diferencias mensuales en UTM y expresa el total en pesos a
+ * utmValorActual — así calculan la deuda los Tribunales de Familia.
+ *
+ * El ajuste en pesos se calcula sobre el total SIN redondear, para que
+ * coincida centavo a centavo con la última fila del historial corrido.
+ * El total en UTM se redondea a 4 decimales solo para mostrar.
+ */
+export function calcularDesbalanceAcumuladoUtm(
+  utmValorActual: number | null,
+  pagos: Pago[],
+): { desbalanceAcumuladoUtm: number; desbalanceAjustado: number | null; estado: Estado } {
+  let totalUtm = 0;
+  for (const pago of pagos) {
+    const diff = calcularDesbalanceUtmMensual(pago);
+    if (diff !== null) {
+      totalUtm += diff;
+    }
+  }
+
+  const desbalanceAjustado = utmValorActual
+    ? redondear(totalUtm * utmValorActual, 2)
+    : null;
+
+  return {
+    desbalanceAcumuladoUtm: redondear(totalUtm, 4),
+    desbalanceAjustado,
+    estado: estadoDe(totalUtm),
+  };
 }

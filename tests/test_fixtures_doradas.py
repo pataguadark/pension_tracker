@@ -17,7 +17,9 @@ import pytest
 from pensiontracker.formatters import fmt_factor, limpiar_entero, limpiar_factor
 from pensiontracker.services.calculation_service import (
     calcular_cuota_pactada,
+    calcular_desbalance_acumulado_utm,
     calcular_desbalance_mensual,
+    calcular_desbalance_utm_mensual,
     formatear_pesos,
 )
 
@@ -167,3 +169,48 @@ def test_desbalance_mensual_contra_fixtures(nombre, entrada, esperado):
             esperado["diferencia"], abs=TOLERANCIA_ABSOLUTA_PARIDAD_TS
         )
         assert obtenido["estado"] == esperado["estado"]
+
+
+# Mapa de las claves camelCase que usan las fixtures a las snake_case que
+# espera el Python. Solo cubre las claves de `pago` que aparecen en
+# desbalance-utm.json; no es un traductor genérico.
+MAPA_CLAVES = {
+    "utmFactor": "utm_factor",
+    "utmValor": "utm_valor",
+    "cuotaPactada": "cuota_pactada",
+    "montoPagado": "monto_pagado",
+    "mesPago": "mes_pago",
+    "anioPago": "anio_pago",
+}
+
+
+def a_snake(pago: dict) -> dict:
+    """Traduce las claves camelCase de las fixtures a las snake_case del Python."""
+    return {MAPA_CLAVES.get(k, k): v for k, v in pago.items()}
+
+
+@pytest.mark.parametrize("nombre,entrada,esperado", casos("desbalance-utm.json", "mensual"))
+def test_desbalance_utm_mensual_contra_fixtures(nombre, entrada, esperado):
+    obtenido = calcular_desbalance_utm_mensual(a_snake(entrada))
+    if esperado is None:
+        assert obtenido is None
+    else:
+        assert obtenido == pytest.approx(esperado, abs=TOLERANCIA_ABSOLUTA_PARIDAD_TS)
+
+
+@pytest.mark.parametrize("nombre,entrada,esperado", casos("desbalance-utm.json", "acumulado"))
+def test_desbalance_acumulado_utm_contra_fixtures(nombre, entrada, esperado):
+    pagos = [a_snake(p) for p in entrada["pagos"]]
+    obtenido = calcular_desbalance_acumulado_utm(entrada["utmValorActual"], pagos)
+
+    assert obtenido["desbalance_acumulado_utm"] == pytest.approx(
+        esperado["desbalanceAcumuladoUtm"], abs=TOLERANCIA_ABSOLUTA_PARIDAD_TS
+    )
+    assert obtenido["estado"] == esperado["estado"]
+
+    if esperado["desbalanceAjustado"] is None:
+        assert obtenido["desbalance_ajustado"] is None
+    else:
+        assert obtenido["desbalance_ajustado"] == pytest.approx(
+            esperado["desbalanceAjustado"], abs=TOLERANCIA_ABSOLUTA_PARIDAD_TS
+        )

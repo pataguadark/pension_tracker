@@ -1,0 +1,71 @@
+{
+  "descripcion": "Diferencias convertidas a unidades UTM a la tasa de cada mes, sumadas en UTM y expresadas en pesos a la UTM vigente. Así calculan la deuda los Tribunales de Familia.",
+  "mensual": [
+    {
+      "nombre": "pago exacto no genera diferencia",
+      "entrada": { "utmFactor": 3.0, "utmValor": 70000, "cuotaPactada": 210000.0, "montoPagado": 210000 },
+      "esperado": 0.0
+    },
+    {
+      "nombre": "exceso en un mes",
+      "entrada": { "utmFactor": 3.0, "utmValor": 70000, "cuotaPactada": 210000.0, "montoPagado": 215000 },
+      "esperado": 0.07142857142857162
+    },
+    {
+      "nombre": "deficit en un mes",
+      "entrada": { "utmFactor": 3.0, "utmValor": 67294, "cuotaPactada": 201882.0, "montoPagado": 200000 },
+      "esperado": -0.027966832109846518
+    },
+    {
+      "nombre": "sin utmFactor se deriva de cuota y utm",
+      "entrada": { "utmFactor": null, "utmValor": 70000, "cuotaPactada": 210000.0, "montoPagado": 215000 },
+      "esperado": 0.07142857142857162
+    },
+    {
+      "nombre": "sin utmValor no se puede calcular",
+      "entrada": { "utmFactor": 3.0, "utmValor": 0, "cuotaPactada": 210000.0, "montoPagado": 215000 },
+      "esperado": null
+    }
+  ],
+  "acumulado": [
+    {
+      "nombre": "sin pagos",
+      "entrada": { "utmValorActual": 70000, "pagos": [] },
+      "esperado": { "desbalanceAcumuladoUtm": 0.0, "desbalanceAjustado": 0.0, "estado": "EXACTO" }
+    },
+    {
+      "nombre": "un solo pago deficiente",
+      "entrada": {
+        "utmValorActual": 70000,
+        "pagos": [
+          { "mesPago": 1, "anioPago": 2025, "utmFactor": 3.0, "utmValor": 67294, "cuotaPactada": 201882.0, "montoPagado": 200000, "desbalance": -1882.0 }
+        ]
+      },
+      "esperado": { "desbalanceAcumuladoUtm": -0.028, "desbalanceAjustado": -1957.68, "estado": "DEUDA" }
+    },
+    {
+      "nombre": "tres pagos con UTM distinta mezclando exceso y deficit",
+      "entrada": {
+        "utmValorActual": 70000,
+        "pagos": [
+          { "mesPago": 1, "anioPago": 2025, "utmFactor": 3.0, "utmValor": 67294, "cuotaPactada": 201882.0, "montoPagado": 200000, "desbalance": -1882.0 },
+          { "mesPago": 2, "anioPago": 2025, "utmFactor": 3.0, "utmValor": 67429, "cuotaPactada": 202287.0, "montoPagado": 202287, "desbalance": 0.0 },
+          { "mesPago": 3, "anioPago": 2025, "utmFactor": 3.0, "utmValor": 68034, "cuotaPactada": 204102.0, "montoPagado": 210000, "desbalance": 5898.0 }
+        ]
+      },
+      "esperado": { "desbalanceAcumuladoUtm": 0.0587, "desbalanceAjustado": 4110.76, "estado": "EXCEDENTE" }
+    },
+    {
+      "nombre": "sin UTM de referencia el ajuste en pesos queda nulo",
+      "entrada": {
+        "utmValorActual": null,
+        "pagos": [
+          { "mesPago": 1, "anioPago": 2025, "utmFactor": 3.0, "utmValor": 67294, "cuotaPactada": 201882.0, "montoPagado": 200000, "desbalance": -1882.0 },
+          { "mesPago": 2, "anioPago": 2025, "utmFactor": 3.0, "utmValor": 67429, "cuotaPactada": 202287.0, "montoPagado": 202287, "desbalance": 0.0 },
+          { "mesPago": 3, "anioPago": 2025, "utmFactor": 3.0, "utmValor": 68034, "cuotaPactada": 204102.0, "montoPagado": 210000, "desbalance": 5898.0 }
+        ]
+      },
+      "esperado": { "desbalanceAcumuladoUtm": 0.0587, "desbalanceAjustado": null, "estado": "EXCEDENTE" }
+    }
+  ]
+}
