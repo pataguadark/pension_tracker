@@ -39,21 +39,25 @@ def calcular_cuota_pactada(utm_factor: float, utm_valor: float) -> float:
     Retorna:
         float: Monto en pesos (ej: 241130.5)
     """
-    # `not (x > 0)` cubre negativos, cero y NaN (NaN > 0 es False), pero NO
-    # cubre infinito (inf > 0 es True): por eso se exige además
-    # math.isfinite, o un utm_factor/utm_valor infinito pasaría el guard y
-    # produciría una cuota infinita que terminaría persistida en la BD.
-    if not (utm_factor > 0) or not math.isfinite(utm_factor):
-        raise ValueError("El factor UTM debe ser un número positivo y finito.")
-    if not (utm_valor > 0) or not math.isfinite(utm_valor):
-        raise ValueError("El valor de la UTM debe ser un número positivo y finito.")
+    # `not (x > 0)` cubre negativos, cero y NaN (NaN > 0 es False); no
+    # cubre +infinito (inf > 0 es True), pero eso no hace falta: un
+    # utm_factor o utm_valor +infinito, multiplicado por el otro operando
+    # ya validado positivo, da un producto infinito (no hay forma de que
+    # dé finito), y el guard de más abajo lo atrapa. Antes había acá un
+    # `or not math.isfinite(...)` adicional por variable; quedó
+    # redundante con ese guard del producto y se quitó (ver commit que
+    # agregó la validación de finitud del producto).
+    if not (utm_factor > 0):
+        raise ValueError("El factor UTM debe ser un número positivo.")
+    if not (utm_valor > 0):
+        raise ValueError("El valor de la UTM debe ser un número positivo.")
 
     resultado = round(utm_factor * utm_valor, 2)
-    # utm_factor y utm_valor finitos no garantizan que su producto lo sea
-    # (overflow de double): sin este guard, una cuota infinita pasaría de
-    # largo y terminaría persistida en la BD, tal como advierte el
-    # comentario de arriba. El TypeScript ya lanza acá porque redondear()
-    # rechaza los no finitos.
+    # utm_factor y utm_valor positivos no garantizan que su producto sea
+    # finito (overflow de double, o +infinito colándose por el guard de
+    # arriba): sin este guard, una cuota infinita pasaría de largo y
+    # terminaría persistida en la BD. El TypeScript ya lanza acá porque
+    # redondear() rechaza los no finitos.
     if not math.isfinite(resultado):
         raise ValueError("La cuota pactada calculada no es un valor finito.")
     return resultado

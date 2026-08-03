@@ -9,8 +9,8 @@ routes/utm.py).
 import math
 import re
 
-_FACTOR_VALIDO = re.compile(r"^-?[0-9]*\.?[0-9]+$")
-_ENTERO_VALIDO = re.compile(r"^-?[0-9]+$")
+_FACTOR_VALIDO = re.compile(r"^-?[0-9]*\.?[0-9]+\Z")
+_ENTERO_VALIDO = re.compile(r"^-?[0-9]+\Z")
 
 
 def limpiar_entero(valor: str) -> int:
@@ -26,6 +26,9 @@ def limpiar_entero(valor: str) -> int:
     flag /u solo matchea 0-9); acá se exige la misma forma estricta
     ([0-9] explícito, no \\d, que en un patrón Python sí matchea dígitos
     Unicode) antes de convertir, para que ambos lados rechacen igual.
+    Se usa \\Z en vez de $ al final del patrón: $ en Python acepta un
+    salto de línea final (p. ej. '1000\\n'), cosa que el $ de JavaScript
+    (sin flag /m) no hace; \\Z sí exige el fin real de la cadena.
     """
     if not valor:
         raise ValueError("Valor vacío")
@@ -81,7 +84,10 @@ def limpiar_factor(valor: str) -> float:
     # Se exige la misma forma estricta que el TypeScript (^-?\d*\.?\d+$,
     # donde \d sin flag /u solo matchea 0-9); acá se usa [0-9] explícito
     # en vez de \d, que en un patrón Python sí matchea dígitos Unicode
-    # (p. ej. arábigo-índicos), para que ambos lados rechacen igual.
+    # (p. ej. arábigo-índicos), para que ambos lados rechacen igual. Se
+    # usa \Z en vez de $: $ en Python acepta un salto de línea final,
+    # mientras el $ de JavaScript (sin flag /m) no, así que \Z deja
+    # ambos patrones simétricos.
     if not _FACTOR_VALIDO.match(normalizado):
         raise ValueError(f"Factor UTM inválido: {valor!r}")
 

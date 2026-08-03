@@ -109,6 +109,18 @@
         { "mesPago": 2, "desbalanceCorrido": 0.01, "estadoCorrido": "EXCEDENTE", "desbalanceUtmMesPesos": 0.01, "desbalanceUtmCorridoPesos": 0.02, "estadoUtmMes": "EXCEDENTE", "estadoUtmCorrido": "EXCEDENTE" },
         { "mesPago": 1, "desbalanceCorrido": 0.01, "estadoCorrido": "EXCEDENTE", "desbalanceUtmMesPesos": 0.01, "desbalanceUtmCorridoPesos": 0.01, "estadoUtmMes": "EXCEDENTE", "estadoUtmCorrido": "EXCEDENTE" }
       ]
+    },
+    {
+      "nombre": "saldo corrido exactamente cero es EXACTO, no EXCEDENTE",
+      "entrada": {
+        "utmValorActual": 70000,
+        "pagos": [
+          { "mesPago": 1, "anioPago": 2025, "utmFactor": 3.0, "utmValor": 70000, "cuotaPactada": 210000.0, "montoPagado": 210000, "desbalance": 0.0 }
+        ]
+      },
+      "esperado": [
+        { "mesPago": 1, "desbalanceCorrido": 0.0, "estadoCorrido": "EXACTO", "desbalanceUtmMesPesos": 0.0, "desbalanceUtmCorridoPesos": 0.0, "estadoUtmMes": "EXACTO", "estadoUtmCorrido": "EXACTO" }
+      ]
     }
   ],
   "resumen": [
