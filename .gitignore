@@ -26,3 +26,6 @@ datos-iniciales.txt
 
 # Notas de planificación internas: no forman parte del repo público
 .docs/
+
+# Dependencias de la app móvil
+mobile/node_modules/
