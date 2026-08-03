@@ -85,6 +85,58 @@ describe('actualizarPago', () => {
     await repo.actualizarPago(id, { ...PAGO_BASE, utmFactor: null });
     expect((await repo.obtenerPagoPorId(id))!.utmFactor).toBeNull();
   });
+
+  it('actualiza todas las ocho columnas', async () => {
+    // Inserta un pago con valores base
+    const id = await repo.insertarPago(PAGO_BASE);
+
+    // Define nuevos valores, todos distintos de PAGO_BASE en cada campo
+    const pagoActualizado = {
+      fecha: '2025-12-31',
+      mesPago: 12,
+      anioPago: 2024,
+      utmValor: 99999,
+      cuotaPactada: 500000.0,
+      montoPagado: 450000,
+      desbalance: 50000.0,
+      utmFactor: 5.5,
+    };
+
+    // Actualiza
+    await repo.actualizarPago(id, pagoActualizado);
+
+    // Verifica que cada columna se actualizó correctamente
+    const pago = await repo.obtenerPagoPorId(id);
+    expect(pago!.fecha).toBe('2025-12-31');
+    expect(pago!.mesPago).toBe(12);
+    expect(pago!.anioPago).toBe(2024);
+    expect(pago!.utmValor).toBe(99999);
+    expect(pago!.cuotaPactada).toBe(500000.0);
+    expect(pago!.montoPagado).toBe(450000);
+    expect(pago!.desbalance).toBe(50000.0);
+    expect(pago!.utmFactor).toBe(5.5);
+  });
+
+  it('no toca los demás pagos al actualizar', async () => {
+    // Inserta dos pagos distinguibles
+    const a = await repo.insertarPago({ ...PAGO_BASE, mesPago: 1 });
+    const b = await repo.insertarPago({ ...PAGO_BASE, mesPago: 2 });
+
+    // Guarda el estado original del segundo pago
+    const pagoB_original = await repo.obtenerPagoPorId(b);
+
+    // Actualiza solo el primero
+    await repo.actualizarPago(a, {
+      ...PAGO_BASE,
+      mesPago: 6,
+      montoPagado: 999999,
+      desbalance: 123456.0,
+    });
+
+    // Verifica que el segundo pago no cambió
+    const pagoB_final = await repo.obtenerPagoPorId(b);
+    expect(pagoB_final).toEqual(pagoB_original);
+  });
 });
 
 describe('eliminarPago', () => {
