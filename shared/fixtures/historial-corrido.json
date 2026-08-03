@@ -79,6 +79,36 @@
         { "mesPago": 2, "desbalanceCorrido": -1882.0, "estadoCorrido": "DEUDA", "desbalanceUtmMesPesos": null, "desbalanceUtmCorridoPesos": null, "estadoUtmMes": null, "estadoUtmCorrido": null },
         { "mesPago": 1, "desbalanceCorrido": -1882.0, "estadoCorrido": "DEUDA", "desbalanceUtmMesPesos": -1957.68, "desbalanceUtmCorridoPesos": -1957.68, "estadoUtmMes": "DEUDA", "estadoUtmCorrido": "DEUDA" }
       ]
+    },
+    {
+      "nombre": "fila con utmValor 0 mezclada con filas normales: esa fila no tiene diferencia UTM calculable",
+      "entrada": {
+        "utmValorActual": 70000,
+        "pagos": [
+          { "mesPago": 1, "anioPago": 2025, "utmFactor": 3.0, "utmValor": 67294, "cuotaPactada": 201882.0, "montoPagado": 200000, "desbalance": -1882.0 },
+          { "mesPago": 2, "anioPago": 2025, "utmFactor": null, "utmValor": 0, "cuotaPactada": 202287.0, "montoPagado": 202287, "desbalance": 0.0 }
+        ]
+      },
+      "esperado": [
+        { "mesPago": 2, "desbalanceCorrido": -1882.0, "estadoCorrido": "DEUDA", "desbalanceUtmMesPesos": null, "desbalanceUtmCorridoPesos": null, "estadoUtmMes": null, "estadoUtmCorrido": null },
+        { "mesPago": 1, "desbalanceCorrido": -1882.0, "estadoCorrido": "DEUDA", "desbalanceUtmMesPesos": -1957.68, "desbalanceUtmCorridoPesos": -1957.68, "estadoUtmMes": "DEUDA", "estadoUtmCorrido": "DEUDA" }
+      ]
+    },
+    {
+      "nombre": "desbalances con centavos que se acumulan solo cuadran si el saldo corrido se redondea a 2 decimales",
+      "entrada": {
+        "utmValorActual": 70000,
+        "pagos": [
+          { "mesPago": 1, "anioPago": 2025, "utmFactor": 3.0, "utmValor": 70000, "cuotaPactada": 210000.005, "montoPagado": 210000.01, "desbalance": 0.005 },
+          { "mesPago": 2, "anioPago": 2025, "utmFactor": 3.0, "utmValor": 70000, "cuotaPactada": 210000.005, "montoPagado": 210000.01, "desbalance": 0.005 },
+          { "mesPago": 3, "anioPago": 2025, "utmFactor": 3.0, "utmValor": 70000, "cuotaPactada": 210000.005, "montoPagado": 210000.01, "desbalance": 0.005 }
+        ]
+      },
+      "esperado": [
+        { "mesPago": 3, "desbalanceCorrido": 0.01, "estadoCorrido": "EXCEDENTE", "desbalanceUtmMesPesos": 0.01, "desbalanceUtmCorridoPesos": 0.03, "estadoUtmMes": "EXCEDENTE", "estadoUtmCorrido": "EXCEDENTE" },
+        { "mesPago": 2, "desbalanceCorrido": 0.01, "estadoCorrido": "EXCEDENTE", "desbalanceUtmMesPesos": 0.01, "desbalanceUtmCorridoPesos": 0.02, "estadoUtmMes": "EXCEDENTE", "estadoUtmCorrido": "EXCEDENTE" },
+        { "mesPago": 1, "desbalanceCorrido": 0.01, "estadoCorrido": "EXCEDENTE", "desbalanceUtmMesPesos": 0.01, "desbalanceUtmCorridoPesos": 0.01, "estadoUtmMes": "EXCEDENTE", "estadoUtmCorrido": "EXCEDENTE" }
+      ]
     }
   ],
   "resumen": [
