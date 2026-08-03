@@ -22,6 +22,16 @@
       "esperado": 0.07142857142857162
     },
     {
+      "nombre": "utmFactor guardado inconsistente con cuota/utm: manda el guardado",
+      "entrada": { "utmFactor": 3.0, "utmValor": 67294, "cuotaPactada": 190000, "montoPagado": 200000 },
+      "esperado": -0.027966832109846518
+    },
+    {
+      "nombre": "sin utmFactor guardado, misma cuota inconsistente: se deriva y da otro resultado",
+      "entrada": { "utmFactor": null, "utmValor": 67294, "cuotaPactada": 190000, "montoPagado": 200000 },
+      "esperado": 0.14860165839450756
+    },
+    {
       "nombre": "sin utmValor no se puede calcular",
       "entrada": { "utmFactor": 3.0, "utmValor": 0, "cuotaPactada": 210000.0, "montoPagado": 215000 },
       "esperado": null
