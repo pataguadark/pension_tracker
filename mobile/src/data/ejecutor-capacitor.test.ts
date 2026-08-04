@@ -193,6 +193,46 @@ describe('EjecutorCapacitor', () => {
     );
   });
 
+  it('lanza también si el plugin omite el result en vez de decir false', async () => {
+    // `capSQLiteResult.result` es opcional. Que falte no es "sí": si el
+    // plugin no confirma que la transacción abrió, no se puede seguir
+    // escribiendo dentro de ella. Por eso la guarda compara `!== true` y no
+    // `=== false`.
+    const plugin = {
+      run: async () => ({ changes: { changes: 0 } }),
+      execute: async () => ({ changes: { changes: 0 } }),
+      query: async () => ({ values: [] }),
+      beginTransaction: async () => ({ changes: { changes: 0 } }),
+      commitTransaction: async () => ({ changes: { changes: 0 } }),
+      rollbackTransaction: async () => ({ changes: { changes: 0 } }),
+      isTransactionActive: async () => ({}),
+    };
+    const ejecutor = new EjecutorCapacitor(plugin);
+    await expect(ejecutor.ejecutar('BEGIN')).rejects.toThrow(
+      'El plugin no abrió la transacción tras beginTransaction',
+    );
+  });
+
+  it('lanza si el plugin no informa cuántas filas afectó', async () => {
+    // `capSQLiteChanges.changes` y `Changes.changes` son opcionales en el
+    // tipo del plugin. Si faltaran, devolver 0 sería indistinguible de "no
+    // escribió nada", que es justo lo que decide quien llama. Antes de
+    // mentir sobre una escritura, falla.
+    const plugin = {
+      run: async () => ({}),
+      execute: async () => ({ changes: { changes: 0 } }),
+      query: async () => ({ values: [] }),
+      beginTransaction: async () => ({ changes: { changes: 0 } }),
+      commitTransaction: async () => ({ changes: { changes: 0 } }),
+      rollbackTransaction: async () => ({ changes: { changes: 0 } }),
+      isTransactionActive: async () => ({ result: true }),
+    };
+    const ejecutor = new EjecutorCapacitor(plugin);
+    await expect(ejecutor.correr('INSERT INTO t (v) VALUES (?)', ['a'])).rejects.toThrow(
+      'El plugin no informó cuántas filas afectó la sentencia',
+    );
+  });
+
   it('tras COMMIT, la siguiente escritura vuelve a pedir su propia transacción', async () => {
     // El flag interno `enTransaccion` debe bajar tras COMMIT: una escritura
     // posterior no debe seguir asumiendo que hay una transacción explícita
