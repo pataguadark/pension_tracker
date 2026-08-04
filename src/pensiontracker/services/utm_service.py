@@ -182,21 +182,8 @@ def obtener_utm_anio(anio: int) -> dict:
 
     Lanza ScraperError si la petición falla (igual que _get_json).
     """
-    serie = _get_json(API_ANIO.format(anio=anio)).get("serie", [])
-    valores = {}
-    for item in serie:
-        fecha = item.get("fecha", "")
-        if len(fecha) >= 7:
-            try:
-                y = int(fecha[0:4])
-                m = int(fecha[5:7])
-            except ValueError:
-                continue
-            if y == anio and item.get("valor") is not None:
-                valor = float(item["valor"])
-                if math.isfinite(valor):
-                    valores[m] = valor
-    return valores
+    respuesta = _get_json(API_ANIO.format(anio=anio))
+    return _extraer_valores_del_anio(respuesta, anio)
 
 
 def obtener_utm_mes_con_cache(anio: int, mes: int) -> dict:
@@ -303,6 +290,39 @@ def _get_json(url: str) -> dict:
         )
     except ValueError:
         raise ScraperError(f"mindicador.cl devolvió una respuesta no válida ({url}).")
+
+
+def _extraer_valores_del_anio(respuesta: dict, anio: int) -> dict:
+    """
+    Extrae de una respuesta de mindicador.cl (ya decodificada) los valores
+    publicados para `anio`, como {mes: valor}. Solo incluye los meses
+    presentes en la serie: los futuros o no publicados no aparecen.
+
+    Función pura (sin red): separada de obtener_utm_anio para poder
+    verificarla contra las fixtures doradas de shared/fixtures/serie-utm.json,
+    igual que se hizo con obtener_historial_desbalances y
+    resumir_estado_cuenta.
+
+    Validar duro al escribir: un "valor" que mindicador.cl devuelva fuera
+    del rango representable por un double (o cualquier otra forma no
+    finita) se descarta en vez de persistirse; ese mes queda como si no
+    hubiera sido publicado todavía.
+    """
+    serie = respuesta.get("serie", [])
+    valores = {}
+    for item in serie:
+        fecha = item.get("fecha", "")
+        if len(fecha) >= 7:
+            try:
+                y = int(fecha[0:4])
+                m = int(fecha[5:7])
+            except ValueError:
+                continue
+            if y == anio and item.get("valor") is not None:
+                valor = float(item["valor"])
+                if math.isfinite(valor):
+                    valores[m] = valor
+    return valores
 
 
 def _buscar_mes_en_serie(serie: list, anio: int, mes: int) -> float | None:

@@ -24,6 +24,10 @@ from pensiontracker.services.calculation_service import (
     obtener_historial_desbalances,
     resumir_estado_cuenta,
 )
+from pensiontracker.services.utm_service import (
+    _buscar_mes_en_serie,
+    _extraer_valores_del_anio,
+)
 
 FIXTURES = Path(__file__).resolve().parent.parent / "shared" / "fixtures"
 
@@ -322,3 +326,21 @@ def test_resumen_estado_cuenta_contra_fixtures(nombre, entrada, esperado):
         esperado["desbalanceAcumulado"], abs=TOLERANCIA_ABSOLUTA_PARIDAD_TS
     )
     assert obtenido["estado"] == esperado["estado"]
+
+
+@pytest.mark.parametrize("nombre,entrada,esperado",
+                         casos("serie-utm.json", "extraerValoresDelAnio"))
+def test_extraer_valores_del_anio_contra_fixtures(nombre, entrada, esperado):
+    obtenido = _extraer_valores_del_anio(entrada["respuesta"], entrada["anio"])
+    # Las claves del JSON son cadenas; las del Python, enteros.
+    assert {str(k): v for k, v in obtenido.items()} == esperado
+
+
+@pytest.mark.parametrize("nombre,entrada,esperado",
+                         casos("serie-utm.json", "buscarMesEnSerie"))
+def test_buscar_mes_en_serie_contra_fixtures(nombre, entrada, esperado):
+    obtenido = _buscar_mes_en_serie(entrada["serie"], entrada["anio"], entrada["mes"])
+    if esperado is None:
+        assert obtenido is None
+    else:
+        assert obtenido == pytest.approx(esperado, abs=TOLERANCIA_ABSOLUTA_PARIDAD_TS)

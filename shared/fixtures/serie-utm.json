@@ -1,0 +1,99 @@
+{
+  "descripcion": "Parseo de la respuesta de mindicador.cl. Las fechas son la medianoche chilena expresada en UTC, con desfase variable por horario de verano; deben leerse cortando el string y nunca construyendo un Date, porque el mes resultante dependería del huso del dispositivo.",
+  "extraerValoresDelAnio": [
+    {
+      "nombre": "serie normal de tres meses",
+      "entrada": {
+        "anio": 2025,
+        "respuesta": { "serie": [
+          { "fecha": "2025-03-01T03:00:00.000Z", "valor": 68034 },
+          { "fecha": "2025-02-01T03:00:00.000Z", "valor": 67429 },
+          { "fecha": "2025-01-01T03:00:00.000Z", "valor": 67294 }
+        ] }
+      },
+      "esperado": { "1": 67294, "2": 67429, "3": 68034 }
+    },
+    {
+      "nombre": "diciembre con desfase de verano no se corre a noviembre",
+      "entrada": {
+        "anio": 2025,
+        "respuesta": { "serie": [{ "fecha": "2025-12-01T03:00:00.000Z", "valor": 69542 }] }
+      },
+      "esperado": { "12": 69542 }
+    },
+    {
+      "nombre": "junio con desfase de invierno",
+      "entrada": {
+        "anio": 2025,
+        "respuesta": { "serie": [{ "fecha": "2025-06-01T04:00:00.000Z", "valor": 68785 }] }
+      },
+      "esperado": { "6": 68785 }
+    },
+    {
+      "nombre": "descarta los meses de otro anio",
+      "entrada": {
+        "anio": 2025,
+        "respuesta": { "serie": [
+          { "fecha": "2025-01-01T03:00:00.000Z", "valor": 67294 },
+          { "fecha": "2024-12-01T03:00:00.000Z", "valor": 66500 }
+        ] }
+      },
+      "esperado": { "1": 67294 }
+    },
+    {
+      "nombre": "descarta valores nulos",
+      "entrada": {
+        "anio": 2025,
+        "respuesta": { "serie": [
+          { "fecha": "2025-01-01T03:00:00.000Z", "valor": 67294 },
+          { "fecha": "2025-02-01T03:00:00.000Z", "valor": null }
+        ] }
+      },
+      "esperado": { "1": 67294 }
+    },
+    {
+      "nombre": "descarta fechas malformadas",
+      "entrada": {
+        "anio": 2025,
+        "respuesta": { "serie": [
+          { "fecha": "2025-01-01T03:00:00.000Z", "valor": 67294 },
+          { "fecha": "no-es-fecha", "valor": 99999 },
+          { "fecha": "", "valor": 88888 }
+        ] }
+      },
+      "esperado": { "1": 67294 }
+    },
+    {
+      "nombre": "sin clave serie devuelve vacio",
+      "entrada": { "anio": 2025, "respuesta": { "version": "1.7.0" } },
+      "esperado": {}
+    },
+    {
+      "nombre": "serie vacia devuelve vacio",
+      "entrada": { "anio": 2025, "respuesta": { "serie": [] } },
+      "esperado": {}
+    }
+  ],
+  "buscarMesEnSerie": [
+    {
+      "nombre": "encuentra el mes pedido",
+      "entrada": { "anio": 2025, "mes": 2, "serie": [
+        { "fecha": "2025-01-01T03:00:00.000Z", "valor": 67294 },
+        { "fecha": "2025-02-01T03:00:00.000Z", "valor": 67429 }
+      ] },
+      "esperado": 67429
+    },
+    {
+      "nombre": "devuelve nulo si el mes no esta",
+      "entrada": { "anio": 2025, "mes": 7, "serie": [
+        { "fecha": "2025-01-01T03:00:00.000Z", "valor": 67294 }
+      ] },
+      "esperado": null
+    },
+    {
+      "nombre": "devuelve nulo con serie vacia",
+      "entrada": { "anio": 2025, "mes": 1, "serie": [] },
+      "esperado": null
+    }
+  ]
+}

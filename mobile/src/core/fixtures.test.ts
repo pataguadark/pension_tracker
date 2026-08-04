@@ -20,6 +20,7 @@ import {
 } from './calculos';
 import { fmtFactor, formatearPesos, limpiarEntero, limpiarFactor } from './formatters';
 import type { Pago } from './tipos';
+import { buscarMesEnSerie, extraerValoresDelAnio } from '../utm/serie';
 
 const AQUI = dirname(fileURLToPath(import.meta.url));
 const FIXTURES = resolve(AQUI, '../../../shared/fixtures');
@@ -311,5 +312,28 @@ describe('resumirEstadoCuenta contra fixtures', () => {
     expect(obtenido.totalPactado).toBeCloseTo(esp.totalPactado, 10);
     expect(obtenido.desbalanceAcumulado).toBeCloseTo(esp.desbalanceAcumulado, 10);
     expect(obtenido.estado).toBe(esp.estado);
+  });
+});
+
+const serieUtm = cargar('serie-utm.json');
+
+describe('extraerValoresDelAnio contra fixtures', () => {
+  it.each(obtenerCasos(serieUtm, 'extraerValoresDelAnio'))('$nombre', ({ entrada, esperado }) => {
+    const { respuesta, anio } = entrada as { respuesta: unknown; anio: number };
+    const obtenido = extraerValoresDelAnio(respuesta, anio);
+    const comoObjeto = Object.fromEntries([...obtenido].map(([m, v]) => [String(m), v]));
+    expect(comoObjeto).toEqual(esperado);
+  });
+});
+
+describe('buscarMesEnSerie contra fixtures', () => {
+  it.each(obtenerCasos(serieUtm, 'buscarMesEnSerie'))('$nombre', ({ entrada, esperado }) => {
+    const { serie, anio, mes } = entrada as { serie: unknown; anio: number; mes: number };
+    const obtenido = buscarMesEnSerie(serie, anio, mes);
+    if (esperado === null) {
+      expect(obtenido).toBeNull();
+    } else {
+      expect(obtenido).toBeCloseTo(esperado as number, 10);
+    }
   });
 });
