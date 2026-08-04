@@ -124,6 +124,22 @@ describe('EjecutorCapacitor', () => {
     expect(actualizado.ultimoId).toBeNull();
   });
 
+  it('un INSERT que no inserta nada no informa el id de la fila anterior', async () => {
+    // El otro flanco del filtro: acá `esSentenciaInsert` sí acierta, y lo
+    // único que descarta el id rancio de la conexión es `cambios > 0`. Hoy
+    // el repositorio solo emite INSERT INTO e INSERT OR REPLACE, que siempre
+    // afectan una fila; esto queda fijado para el día en que alguien agregue
+    // un INSERT OR IGNORE o un ON CONFLICT DO NOTHING.
+    const { ejecutor } = nuevoEjecutor();
+    await ejecutor.ejecutar('CREATE TABLE t (id INTEGER PRIMARY KEY, v TEXT UNIQUE)');
+    const alta = await ejecutor.correr('INSERT INTO t (v) VALUES (?)', ['a']);
+    expect(alta.ultimoId).toBe(1);
+
+    const ignorado = await ejecutor.correr('INSERT OR IGNORE INTO t (v) VALUES (?)', ['a']);
+    expect(ignorado.cambios).toBe(0);
+    expect(ignorado.ultimoId).toBeNull();
+  });
+
   it('descarta el lastId centinela que el plugin devuelve cuando no aplica', async () => {
     // El plugin real no dice "no inserté nada": devuelve -1, y en algunas
     // plataformas 0. Tomarlo tal cual pondría un id inválido en un campo
