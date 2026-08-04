@@ -110,4 +110,90 @@ export class ServicioUtm {
       'respuesta_invalida',
     );
   }
+
+  /**
+   * Valor de un mes priorizando la caché local. Si el mes no está, trae el
+   * año completo en una sola petición y cachea todo lo recibido: completar
+   * varios meses del mismo año no debe costar una petición por mes.
+   */
+  async obtenerUtmMesConCache(anio: number, mes: number): Promise<ResultadoUtm> {
+    const resultado: ResultadoUtm = { utm: null, mes, anio, fuente: null, error: null };
+
+    const guardado = await this.repo.obtenerUtmGuardada(anio, mes);
+    if (guardado) {
+      resultado.utm = guardado.utmValor;
+      resultado.fuente = 'base_de_datos';
+      return resultado;
+    }
+
+    let serieAnio: Map<number, number>;
+    try {
+      serieAnio = await this.obtenerUtmAnio(anio);
+    } catch (e) {
+      resultado.fuente = 'no_disponible';
+      resultado.error = e instanceof Error ? e.message : String(e);
+      return resultado;
+    }
+
+    if (serieAnio.size > 0) {
+      await this.repo.guardarUtmBulk(anio, serieAnio);
+    }
+
+    const valor = serieAnio.get(mes);
+    if (valor !== undefined) {
+      resultado.utm = valor;
+      resultado.fuente = 'mindicador';
+    } else {
+      resultado.fuente = 'no_disponible';
+      resultado.error =
+        `mindicador.cl no tiene UTM publicada para ${String(mes).padStart(2, '0')}/${anio}. ` +
+        `Es posible que el mes aún no esté disponible.`;
+    }
+    return resultado;
+  }
+
+  /**
+   * Si la UTM del mes indicado no está guardada, la busca y la persiste.
+   *
+   * Se llama al arrancar, así que **nunca lanza**: un problema de red no
+   * puede impedir que la app abra. Solo persiste si el valor vino de
+   * mindicador.cl, no si salió de la propia base.
+   */
+  async refrescarUtmSiFalta(anio: number, mes: number): Promise<void> {
+    try {
+      if (await this.repo.obtenerUtmGuardada(anio, mes)) return;
+      const resultado = await this.obtenerUtm(anio, mes);
+      if (resultado.utm !== null && resultado.fuente === 'mindicador') {
+        await this.repo.guardarUtm(resultado.anio, resultado.mes, resultado.utm);
+      }
+    } catch {
+      // Silencio deliberado: ver el docstring.
+    }
+  }
+
+  /**
+   * UTM a mostrar como referencia: la del mes indicado, o la última
+   * guardada marcada como no actual.
+   *
+   * Tolerar al leer: una fila con un valor no finito —persistida por una
+   * versión sin el guard de finitud, o por una respuesta extrema de la
+   * API— se trata igual que si no hubiera valor, en vez de propagar el
+   * `inf` al cálculo, que lo rechazaría.
+   */
+  async obtenerUtmReferencia(
+    anio: number,
+    mes: number,
+  ): Promise<{ utmValor: number | null; esActual: boolean }> {
+    const actual = await this.repo.obtenerUtmGuardada(anio, mes);
+    if (actual && Number.isFinite(actual.utmValor)) {
+      return { utmValor: actual.utmValor, esActual: true };
+    }
+
+    const ultima = await this.repo.obtenerUltimaUtmGuardada();
+    if (ultima && Number.isFinite(ultima.utmValor)) {
+      return { utmValor: ultima.utmValor, esActual: false };
+    }
+
+    return { utmValor: null, esActual: false };
+  }
 }
