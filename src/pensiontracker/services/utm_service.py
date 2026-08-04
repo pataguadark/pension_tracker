@@ -292,6 +292,49 @@ def _get_json(url: str) -> dict:
         raise ScraperError(f"mindicador.cl devolvió una respuesta no válida ({url}).")
 
 
+def _anio_mes_de(fecha) -> tuple[int, int] | None:
+    """
+    Año y mes de una fecha ISO, leídos cortando el texto (nunca con
+    datetime.fromisoformat ni similar: ver la nota de husos horarios en
+    mobile/src/utm/serie.ts, de donde este criterio se replica).
+
+    Tolerar al leer: mindicador.cl es una fuente externa y una respuesta
+    inesperada (fecha que no es texto, texto corto, mes fuera de 1-12) no
+    debe reventar el parseo; se retorna None y el item se descarta más
+    arriba, igual que hace anioYMesDe en el lado TypeScript.
+    """
+    if not isinstance(fecha, str) or len(fecha) < 7:
+        return None
+    try:
+        anio = int(fecha[0:4])
+        mes = int(fecha[5:7])
+    except ValueError:
+        return None
+    if not (1 <= mes <= 12):
+        return None
+    return anio, mes
+
+
+def _valor_finito_de(valor) -> float | None:
+    """
+    Valor numérico y finito de un item, o None si no lo es.
+
+    Tolerar al leer: un "valor" que no se pueda convertir a número (p. ej.
+    una cadena no numérica que mindicador.cl decida devolver) se descarta
+    en vez de lanzar, igual que valorFinito en mobile/src/utm/serie.ts.
+    Validar duro al escribir: un valor fuera del rango representable por
+    un double (o cualquier otra forma no finita) también se descarta; ese
+    mes queda como si no hubiera sido publicado todavía.
+    """
+    if valor is None:
+        return None
+    try:
+        numero = float(valor)
+    except (TypeError, ValueError):
+        return None
+    return numero if math.isfinite(numero) else None
+
+
 def _extraer_valores_del_anio(respuesta: dict, anio: int) -> dict:
     """
     Extrae de una respuesta de mindicador.cl (ya decodificada) los valores
@@ -303,25 +346,25 @@ def _extraer_valores_del_anio(respuesta: dict, anio: int) -> dict:
     igual que se hizo con obtener_historial_desbalances y
     resumir_estado_cuenta.
 
-    Validar duro al escribir: un "valor" que mindicador.cl devuelva fuera
-    del rango representable por un double (o cualquier otra forma no
-    finita) se descarta en vez de persistirse; ese mes queda como si no
-    hubiera sido publicado todavía.
+    Tolerar al leer: una "serie" que no sea una lista, un item que no sea
+    un diccionario, o una "fecha"/"valor" con forma inesperada se descartan
+    en vez de lanzar (AttributeError/TypeError/ValueError sin capturar,
+    que antes escapaban hasta obtener_utm_mes_con_cache/obtener_utm), igual
+    que en el lado TypeScript.
     """
     serie = respuesta.get("serie", [])
+    if not isinstance(serie, list):
+        return {}
     valores = {}
     for item in serie:
-        fecha = item.get("fecha", "")
-        if len(fecha) >= 7:
-            try:
-                y = int(fecha[0:4])
-                m = int(fecha[5:7])
-            except ValueError:
-                continue
-            if y == anio and item.get("valor") is not None:
-                valor = float(item["valor"])
-                if math.isfinite(valor):
-                    valores[m] = valor
+        if not isinstance(item, dict):
+            continue
+        fecha = _anio_mes_de(item.get("fecha"))
+        if fecha is None or fecha[0] != anio:
+            continue
+        valor = _valor_finito_de(item.get("valor"))
+        if valor is not None:
+            valores[fecha[1]] = valor
     return valores
 
 
@@ -331,20 +374,21 @@ def _buscar_mes_en_serie(serie: list, anio: int, mes: int) -> float | None:
     Retorna el valor como float, o None si no está en la serie o si el
     valor recibido no es finito (validar duro al escribir: ver el
     docstring de obtener_utm_anio, misma razón).
+
+    Tolerar al leer: mismas estructuras inesperadas que
+    _extraer_valores_del_anio (ver su docstring).
     """
+    if not isinstance(serie, list):
+        return None
     for item in serie:
-        fecha = item.get("fecha", "")
-        # fecha ISO: "2026-07-01T04:00:00.000Z"
-        if len(fecha) >= 7:
-            try:
-                y = int(fecha[0:4])
-                m = int(fecha[5:7])
-            except ValueError:
-                continue
-            if y == anio and m == mes and item.get("valor") is not None:
-                valor = float(item["valor"])
-                if math.isfinite(valor):
-                    return valor
+        if not isinstance(item, dict):
+            continue
+        fecha = _anio_mes_de(item.get("fecha"))
+        if fecha is None or fecha != (anio, mes):
+            continue
+        valor = _valor_finito_de(item.get("valor"))
+        if valor is not None:
+            return valor
     return None
 
 

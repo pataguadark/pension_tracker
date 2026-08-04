@@ -72,6 +72,67 @@
       "nombre": "serie vacia devuelve vacio",
       "entrada": { "anio": 2025, "respuesta": { "serie": [] } },
       "esperado": {}
+    },
+    {
+      "nombre": "descarta mes fuera de rango con anio valido",
+      "entrada": {
+        "anio": 2025,
+        "respuesta": { "serie": [{ "fecha": "2025-13-01T03:00:00.000Z", "valor": 100.0 }] }
+      },
+      "esperado": {}
+    },
+    {
+      "nombre": "descarta cuando serie no es una lista",
+      "entrada": { "anio": 2025, "respuesta": { "serie": "no-es-una-lista" } },
+      "esperado": {}
+    },
+    {
+      "nombre": "descarta items que no son objetos",
+      "entrada": {
+        "anio": 2025,
+        "respuesta": { "serie": [
+          "no-es-un-objeto",
+          42,
+          null,
+          { "fecha": "2025-01-01T03:00:00.000Z", "valor": 67294 }
+        ] }
+      },
+      "esperado": { "1": 67294 }
+    },
+    {
+      "nombre": "descarta fecha que no es texto",
+      "entrada": {
+        "anio": 2025,
+        "respuesta": { "serie": [
+          { "fecha": 20250101, "valor": 67294 },
+          { "fecha": null, "valor": 67294 }
+        ] }
+      },
+      "esperado": {}
+    },
+    {
+      "nombre": "descarta valor no numerico",
+      "entrada": {
+        "anio": 2025,
+        "respuesta": { "serie": [{ "fecha": "2025-01-01T03:00:00.000Z", "valor": "abc" }] }
+      },
+      "esperado": {}
+    },
+    {
+      "nombre": "descarta valor infinito",
+      "entrada": {
+        "anio": 2025,
+        "respuesta": { "serie": [{ "fecha": "2025-01-01T03:00:00.000Z", "valor": "Infinity" }] }
+      },
+      "esperado": {}
+    },
+    {
+      "nombre": "descarta valor NaN",
+      "entrada": {
+        "anio": 2025,
+        "respuesta": { "serie": [{ "fecha": "2025-02-01T03:00:00.000Z", "valor": "NaN" }] }
+      },
+      "esperado": {}
     }
   ],
   "buscarMesEnSerie": [
@@ -93,6 +154,62 @@
     {
       "nombre": "devuelve nulo con serie vacia",
       "entrada": { "anio": 2025, "mes": 1, "serie": [] },
+      "esperado": null
+    },
+    {
+      "nombre": "descarta item con mes invalido aunque coincida con el mes buscado",
+      "entrada": { "anio": 2025, "mes": 13, "serie": [
+        { "fecha": "2025-13-01T03:00:00.000Z", "valor": 100.0 }
+      ] },
+      "esperado": null
+    },
+    {
+      "nombre": "ignora item con mes invalido y encuentra el valido despues",
+      "entrada": { "anio": 2025, "mes": 5, "serie": [
+        { "fecha": "2025-13-01T03:00:00.000Z", "valor": 100.0 },
+        { "fecha": "2025-05-01T03:00:00.000Z", "valor": 67894 }
+      ] },
+      "esperado": 67894
+    },
+    {
+      "nombre": "devuelve nulo cuando serie no es una lista",
+      "entrada": { "anio": 2025, "mes": 1, "serie": "no-es-una-lista" },
+      "esperado": null
+    },
+    {
+      "nombre": "descarta items que no son objetos",
+      "entrada": { "anio": 2025, "mes": 1, "serie": [
+        "no-es-un-objeto",
+        { "fecha": "2025-01-01T03:00:00.000Z", "valor": 67294 }
+      ] },
+      "esperado": 67294
+    },
+    {
+      "nombre": "descarta fecha que no es texto",
+      "entrada": { "anio": 2025, "mes": 1, "serie": [
+        { "fecha": 20250101, "valor": 67294 }
+      ] },
+      "esperado": null
+    },
+    {
+      "nombre": "descarta valor no numerico",
+      "entrada": { "anio": 2025, "mes": 1, "serie": [
+        { "fecha": "2025-01-01T03:00:00.000Z", "valor": "abc" }
+      ] },
+      "esperado": null
+    },
+    {
+      "nombre": "descarta valor infinito",
+      "entrada": { "anio": 2025, "mes": 1, "serie": [
+        { "fecha": "2025-01-01T03:00:00.000Z", "valor": "Infinity" }
+      ] },
+      "esperado": null
+    },
+    {
+      "nombre": "descarta valor NaN",
+      "entrada": { "anio": 2025, "mes": 2, "serie": [
+        { "fecha": "2025-02-01T03:00:00.000Z", "valor": "NaN" }
+      ] },
       "esperado": null
     }
   ]
