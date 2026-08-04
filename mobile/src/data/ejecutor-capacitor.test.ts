@@ -151,7 +151,7 @@ describe('EjecutorCapacitor', () => {
       beginTransaction: async () => ({ changes: { changes: 0 } }),
       commitTransaction: async () => ({ changes: { changes: 0 } }),
       rollbackTransaction: async () => ({ changes: { changes: 0 } }),
-      isTransactionActive: async () => false,
+      isTransactionActive: async () => ({ result: false }),
     };
     const ejecutor = new EjecutorCapacitor(plugin);
     const r = await ejecutor.correr('INSERT INTO t (v) VALUES (?)', ['a']);
@@ -167,7 +167,7 @@ describe('EjecutorCapacitor', () => {
       beginTransaction: async () => ({ changes: { changes: 0 } }),
       commitTransaction: async () => ({ changes: { changes: 0 } }),
       rollbackTransaction: async () => ({ changes: { changes: 0 } }),
-      isTransactionActive: async () => false,
+      isTransactionActive: async () => ({ result: false }),
     };
     const ejecutor = new EjecutorCapacitor(plugin);
     expect(await ejecutor.consultar('SELECT 1')).toEqual([]);
@@ -185,7 +185,7 @@ describe('EjecutorCapacitor', () => {
       beginTransaction: async () => ({ changes: { changes: 0 } }),
       commitTransaction: async () => ({ changes: { changes: 0 } }),
       rollbackTransaction: async () => ({ changes: { changes: 0 } }),
-      isTransactionActive: async () => false,
+      isTransactionActive: async () => ({ result: false }),
     };
     const ejecutor = new EjecutorCapacitor(plugin);
     await expect(ejecutor.ejecutar('BEGIN')).rejects.toThrow(
@@ -225,7 +225,7 @@ describe('EjecutorCapacitor', () => {
       rollbackTransaction: async () => {
         throw new Error('el plugin no pudo deshacer');
       },
-      isTransactionActive: async () => true,
+      isTransactionActive: async () => ({ result: true }),
     };
     const ejecutor = new EjecutorCapacitor(plugin);
     await ejecutor.ejecutar('BEGIN');

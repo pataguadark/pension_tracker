@@ -31,6 +31,10 @@ jobs:
         run: npm ci --prefix mobile
       - name: Verificar tipos
         run: npm run typecheck --prefix mobile
+      - name: Verificar tipos de los componentes Svelte
+        # tsc no mira los .svelte: sus comodines solo matchean extensiones que
+        # soporta. Sin este paso, las pantallas entran sin red de tipos.
+        run: npm run check --prefix mobile
       - name: Tests de TypeScript (incluye fixtures doradas)
         run: npm test --prefix mobile
       - name: Construir el bundle

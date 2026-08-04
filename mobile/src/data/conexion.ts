@@ -17,9 +17,15 @@ type ConexionAbrible = ConexionPluginSqlite & {
   close(): Promise<void>;
 };
 
-/** La porción de `SQLiteConnection` que se usa acá. */
+/**
+ * La porción de `SQLiteConnection` que se usa acá.
+ *
+ * `compatibilidad-plugin.ts` afirma que el `SQLiteConnection` real satisface
+ * esta interfaz, así que `tsc` falla si se desalinean. Ojo con los `result`:
+ * el plugin los declara opcionales, no requeridos.
+ */
 export interface FabricaDeConexiones {
-  checkConnectionsConsistency(): Promise<{ result: boolean }>;
+  checkConnectionsConsistency(): Promise<{ result?: boolean }>;
   isConnection(database: string, readonly: boolean): Promise<{ result?: boolean }>;
   retrieveConnection(database: string, readonly: boolean): Promise<ConexionAbrible>;
   createConnection(

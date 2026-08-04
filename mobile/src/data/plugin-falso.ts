@@ -112,7 +112,10 @@ export class ConexionPluginFalsa implements ConexionPluginSqlite {
     return { changes: { changes: 0 } };
   }
 
-  async isTransactionActive(): Promise<boolean> {
-    return this.activa;
+  async isTransactionActive(): Promise<{ result: boolean }> {
+    // Objeto, no booleano: es la forma real de `capSQLiteResult`. Un doble
+    // que devolviera el booleano a secas haría pasar una guarda que contra
+    // el plugin real nunca dispara.
+    return { result: this.activa };
   }
 }

@@ -47,7 +47,13 @@ export class EjecutorCapacitor implements EjecutorSql {
 
     if (comando === 'BEGIN') {
       await this.conexion.beginTransaction();
-      if (!(await this.conexion.isTransactionActive())) {
+      // `isTransactionActive()` devuelve `{ result?: boolean }`, no un
+      // booleano. Negar el objeto directo (`!await ...`) da siempre `false`
+      // y convertía esta guarda en código muerto: hay que leer `result`.
+      // Un `result` ausente cuenta como "no la abrió": si el plugin no
+      // confirma, no se puede dar por abierta una transacción de la que
+      // dependen escrituras.
+      if ((await this.conexion.isTransactionActive()).result !== true) {
         throw new Error('El plugin no abrió la transacción tras beginTransaction');
       }
       this.enTransaccion = true;
@@ -73,8 +79,15 @@ export class EjecutorCapacitor implements EjecutorSql {
 
   async correr(sql: string, params: unknown[] = []): Promise<ResultadoEscritura> {
     const r = await this.conexion.run(sql, params, !this.enTransaccion);
-    const cambios = r.changes.changes;
-    const id = r.changes.lastId;
+    const cambios = r.changes?.changes;
+    // El plugin declara `changes` opcional. En la práctica siempre viene;
+    // si faltara, no se puede decir cuántas filas se afectaron, y devolver 0
+    // sería indistinguible de "no escribió nada" -que es justo lo que quien
+    // llama usa para decidir-. Antes de mentir, falla.
+    if (typeof cambios !== 'number') {
+      throw new Error('El plugin no informó cuántas filas afectó la sentencia');
+    }
+    const id = r.changes?.lastId;
     // El plugin devuelve -1 (o 0) cuando no hay id que informar, así que no
     // basta con que venga definido: tiene que ser positivo y venir de un
     // INSERT que de verdad afectó una fila. Mismo criterio que EjecutorNode.
