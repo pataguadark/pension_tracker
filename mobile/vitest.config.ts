@@ -5,6 +5,6 @@ export default defineConfig({
     globals: true,
     // capacitor.config.test.ts vive en la raíz de mobile/, junto al archivo
     // que prueba (capacitor.config.ts), no bajo src/.
-    include: ['src/**/*.test.ts', 'capacitor.config.test.ts'],
+    include: ['src/**/*.test.ts', 'capacitor.config.test.ts', 'configuracion-build.test.ts'],
   },
 });

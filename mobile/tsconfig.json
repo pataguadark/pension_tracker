@@ -13,5 +13,5 @@
   // extensiones que el compilador soporta. Está para `svelte-check`, que sí
   // lo usa para saber qué componentes revisar. Quien lea esto y lo crea
   // cobertura de tipos de tsc, se equivoca: eso lo da `npm run check`.
-  "include": ["src", "src/**/*.svelte", "capacitor.config.ts", "capacitor.config.test.ts"]
+  "include": ["src", "src/**/*.svelte", "capacitor.config.ts", "capacitor.config.test.ts", "vite.config.ts", "configuracion-build.test.ts"]
 }

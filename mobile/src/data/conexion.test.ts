@@ -13,11 +13,26 @@ import { ConexionPluginFalsa } from './plugin-falso';
  * toda escritura del ejecutor fallaría en el teléfono.
  */
 class FabricaFalsa {
-  readonly llamadas: Array<{ metodo: string; bd?: string; soloLectura?: boolean }> = [];
+  readonly llamadas: Array<{
+    metodo: string;
+    bd?: string;
+    soloLectura?: boolean;
+    cifrada?: boolean;
+    modo?: string;
+    version?: number;
+  }> = [];
   conexion: ConexionPluginFalsa & { open: () => Promise<void>; close: () => Promise<void> };
   abierta = false;
 
+  /**
+   * Qué devuelve `isConnection`. Es `boolean | undefined` y no `boolean`
+   * porque el plugin declara `result` opcional: un doble que solo sabe decir
+   * true/false nunca ejercita la rama del `result` ausente.
+   */
+  resultadoDeIsConnection: boolean | undefined;
+
   constructor(public consistente = true, public existe = false) {
+    this.resultadoDeIsConnection = existe;
     const plugin = new ConexionPluginFalsa(new EjecutorNode(':memory:'));
     this.conexion = Object.assign(plugin, {
       open: async () => { this.abierta = true; },
@@ -36,14 +51,16 @@ class FabricaFalsa {
   }
   async isConnection(bd: string, ro: boolean) {
     this.llamadas.push({ metodo: 'isConnection', bd, soloLectura: ro });
-    return { result: this.existe };
+    return { result: this.resultadoDeIsConnection };
   }
   async retrieveConnection(bd: string, ro: boolean) {
     this.llamadas.push({ metodo: 'retrieveConnection', bd, soloLectura: ro });
     return this.conexion;
   }
-  async createConnection(bd: string, _e: boolean, _m: string, _v: number, ro: boolean) {
-    this.llamadas.push({ metodo: 'createConnection', bd, soloLectura: ro });
+  async createConnection(bd: string, cifrada: boolean, modo: string, version: number, ro: boolean) {
+    this.llamadas.push({
+      metodo: 'createConnection', bd, soloLectura: ro, cifrada, modo, version,
+    });
     return this.conexion;
   }
   async closeConnection(bd: string, ro: boolean) {
@@ -116,6 +133,32 @@ describe('abrirBaseDeDatos', () => {
     // Sin esto, una fábrica que no registrara nada dejaría el bucle vacío
     // y la prueba pasaría sin comprobar nada.
     expect(fabrica.llamadas.filter((l) => l.soloLectura !== undefined)).toHaveLength(3);
+  });
+
+  it('crea la conexión sin cifrado y con la versión de esquema del proyecto', async () => {
+    // `encrypted`, `mode` y `version` son tres parámetros posicionales
+    // seguidos, fáciles de descolocar y sin ningún efecto visible acá.
+    // En el teléfono, `encrypted: true` sin passphrase hace fallar `open()`
+    // al arrancar, y un `mode` desconocido lo rechaza el plugin.
+    const fabrica = new FabricaFalsa(true, false);
+    await abrirBaseDeDatos(fabrica);
+    const creacion = fabrica.llamadas.find((l) => l.metodo === 'createConnection');
+    expect(creacion).toBeDefined();
+    expect(creacion!.cifrada).toBe(false);
+    expect(creacion!.modo).toBe('no-encryption');
+    expect(creacion!.version).toBe(1);
+  });
+
+  it('crea la conexión cuando isConnection omite el result', async () => {
+    // `capSQLiteResult.result` es opcional. Que falte no puede leerse como
+    // "sí existe": recuperar una conexión que el lado nativo no tiene falla
+    // con "Connection ... does not exist". Es la misma trampa que hizo que
+    // la guarda de isTransactionActive fuera código muerto.
+    const fabrica = new FabricaFalsa(true, true);
+    fabrica.resultadoDeIsConnection = undefined;
+    await abrirBaseDeDatos(fabrica);
+    expect(fabrica.metodos).toContain('createConnection');
+    expect(fabrica.metodos).not.toContain('retrieveConnection');
   });
 
   it('todas las llamadas usan el mismo nombre de base', async () => {
