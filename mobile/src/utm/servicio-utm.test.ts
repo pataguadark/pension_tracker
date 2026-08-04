@@ -20,6 +20,26 @@ function clienteQueResponde(porUrl: Record<string, unknown>): ClienteHttp {
   };
 }
 
+/**
+ * Delega en un cliente real, pero cuenta cuántas veces se invocó
+ * obtenerJson. Sirve para fijar que un mes inválido no genera ninguna
+ * petición de red -en un teléfono eso son datos móviles y batería
+ * gastados en una consulta que no puede tener respuesta-, en vez de solo
+ * comprobar `fuente`/`utm`: un mes inválido sin la validación explícita
+ * también termina en `fuente: 'no_disponible'` porque la consulta puntual
+ * falla por falta de respuesta preparada, así que esas aserciones no
+ * distinguen si hubo o no una petición de red de por medio.
+ */
+function clienteQueCuenta(real: ClienteHttp): ClienteHttp & { llamadas: number } {
+  return {
+    llamadas: 0,
+    async obtenerJson(url: string) {
+      this.llamadas += 1;
+      return real.obtenerJson(url);
+    },
+  };
+}
+
 const SERIE_2025 = {
   serie: [
     { fecha: '2025-02-01T03:00:00.000Z', valor: 67429 },
@@ -83,6 +103,16 @@ describe('ServicioUtm.obtenerUtm', () => {
     expect(r.fuente).toBe('no_disponible');
     expect(r.utm).toBeNull();
   });
+
+  it.each([0, 13, -1, 1.5])(
+    'con el mes inválido %s no hace ninguna petición de red',
+    async (mes) => {
+      const contado = clienteQueCuenta(clienteQueResponde({ '/utm/2025': SERIE_2025 }));
+      const s = new ServicioUtm(contado, repo);
+      await s.obtenerUtm(2025, mes);
+      expect(contado.llamadas).toBe(0);
+    },
+  );
 
   it('el mes publicado pero ausente en ambas consultas no queda como mindicador', async () => {
     const s = new ServicioUtm(
