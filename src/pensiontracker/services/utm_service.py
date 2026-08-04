@@ -65,8 +65,11 @@ def obtener_utm(anio: int = None, mes: int = None) -> dict:
         }
     """
     hoy = datetime.today()
-    anio = anio or hoy.year
-    mes = mes or hoy.month
+    # `is None` y no `or`: en Python el 0 es falsy, así que `mes or hoy.month`
+    # reinterpretaba un mes 0 como "el mes actual" y salía a la red por él, en
+    # vez de rechazarlo. El lado TypeScript sí lo rechaza; esto los alinea.
+    anio = hoy.year if anio is None else anio
+    mes = hoy.month if mes is None else mes
 
     resultado = {
         "utm":    None,

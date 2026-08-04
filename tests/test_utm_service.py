@@ -339,3 +339,29 @@ def test_obtener_utm_mes_con_cache_error_de_red_retorna_no_disponible(monkeypatc
     assert resultado["utm"] is None
     assert resultado["fuente"] == "no_disponible"
     assert resultado["error"] is not None
+
+
+@pytest.mark.parametrize("mes_invalido", [0, 13, -1])
+def test_mes_invalido_no_genera_peticion_de_red(monkeypatch, db_temporal, mes_invalido):
+    """
+    Un mes fuera de 1-12 se rechaza antes de salir a la red.
+
+    No basta con comprobar el resultado: sin el guard, la consulta puntual
+    igual fallaría y el resultado final sería el mismo. Lo que este test
+    fija es que no se gaste una petición —datos móviles y batería en el
+    lado Android— en algo que no puede tener respuesta. Es el espejo del
+    test equivalente en mobile/src/utm/servicio-utm.test.ts.
+    """
+    llamadas = []
+
+    def _espia(url):
+        llamadas.append(url)
+        return {"serie": []}
+
+    monkeypatch.setattr(utm_service, "_get_json", _espia)
+
+    resultado = utm_service.obtener_utm(2025, mes_invalido)
+
+    assert llamadas == [], f"no debió consultar la red, pero pidió: {llamadas}"
+    assert resultado["utm"] is None
+    assert resultado["fuente"] == "no_disponible"
