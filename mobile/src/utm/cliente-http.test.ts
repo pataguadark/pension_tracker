@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ClienteHttpFetch, ErrorDeRed } from './cliente-http';
 
 /** fetch falso que responde lo que se le indique. */
@@ -70,15 +70,53 @@ describe('ClienteHttpFetch', () => {
     ).rejects.toMatchObject({ motivo: 'conexion' });
   });
 
-  it('ErrorDeRed es instancia de Error y conserva su nombre', async () => {
+  it('ErrorDeRed es instancia de Error, conserva su nombre y el motivo sobrevive a un catch genérico', async () => {
     const cliente = new ClienteHttpFetch(1000, fetchQueResponde({}, 500));
-    await expect(cliente.obtenerJson('https://ejemplo.cl/api')).rejects.toBeInstanceOf(ErrorDeRed);
+    try {
+      await cliente.obtenerJson('https://ejemplo.cl/api');
+      throw new Error('se esperaba que obtenerJson lanzara ErrorDeRed');
+    } catch (e) {
+      // e llega tipado como unknown (catch genérico); hay que angostarlo.
+      expect(e).toBeInstanceOf(Error);
+      expect(e).toBeInstanceOf(ErrorDeRed);
+      if (!(e instanceof ErrorDeRed)) throw e;
+      expect(e.name).toBe('ErrorDeRed');
+      expect(e.motivo).toBe('http');
+    }
   });
 
-  it('no deja el temporizador vivo tras una respuesta correcta', async () => {
-    // Si el timeout no se cancela, vitest se queda esperando al cerrar.
-    const cliente = new ClienteHttpFetch(60_000, fetchQueResponde({ ok: true }));
-    await cliente.obtenerJson('https://ejemplo.cl/api');
-    expect(true).toBe(true);
+  describe('cancelación del temporizador', () => {
+    let espiaClearTimeout: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      espiaClearTimeout = vi.spyOn(globalThis, 'clearTimeout');
+    });
+
+    afterEach(() => {
+      espiaClearTimeout.mockRestore();
+    });
+
+    it('cancela el temporizador tras una respuesta correcta', async () => {
+      // Si el timeout no se cancela, vitest se queda esperando al cerrar
+      // y cada consulta a la UTM deja un handle de 10s colgando.
+      const cliente = new ClienteHttpFetch(60_000, fetchQueResponde({ ok: true }));
+      await cliente.obtenerJson('https://ejemplo.cl/api');
+      expect(espiaClearTimeout).toHaveBeenCalledTimes(1);
+    });
+
+    it('cancela el temporizador cuando la respuesta es un error HTTP', async () => {
+      const cliente = new ClienteHttpFetch(60_000, fetchQueResponde({}, 500));
+      await expect(cliente.obtenerJson('https://ejemplo.cl/api')).rejects.toBeInstanceOf(ErrorDeRed);
+      expect(espiaClearTimeout).toHaveBeenCalledTimes(1);
+    });
+
+    it('cancela el temporizador cuando fetch lanza una excepción', async () => {
+      const caido = (async () => {
+        throw new TypeError('fetch failed');
+      }) as unknown as typeof fetch;
+      const cliente = new ClienteHttpFetch(60_000, caido);
+      await expect(cliente.obtenerJson('https://ejemplo.cl/api')).rejects.toBeInstanceOf(ErrorDeRed);
+      expect(espiaClearTimeout).toHaveBeenCalledTimes(1);
+    });
   });
 });
