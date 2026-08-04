@@ -10,6 +10,10 @@
  *     `BEGIN` como texto y las pruebas seguirían verdes mientras el teléfono
  *     falla.
  *   - Una transacción anidada es un error, con el mensaje del plugin real.
+ *   - `run()` no filtra `lastId`: como el plugin real, devuelve el rowid
+ *     crudo de la conexión (persiste entre sentencias, incluso las que no
+ *     insertan). Filtrar acá taparía el filtro que debe hacer
+ *     `EjecutorCapacitor.correr()` en vez de ejercitarlo.
  */
 
 import { EjecutorNode } from './ejecutor-node';
@@ -60,7 +64,18 @@ export class ConexionPluginFalsa implements ConexionPluginSqlite {
     try {
       const r = await this.motor.correr(statement, values);
       if (propia) await this.cerrarImplicita();
-      return { changes: { changes: r.cambios, lastId: r.ultimoId ?? -1 } };
+      // El plugin real NO filtra: devuelve el lastInsertRowid de la conexión
+      // SQLite subyacente, que persiste entre sentencias aunque la sentencia
+      // actual no haya insertado nada (ver el comentario de
+      // `esSentenciaInsert` en ejecutor.ts). `r.ultimoId` ya viene filtrado
+      // por EjecutorNode, así que acá NO se usa -si se usara, este doble
+      // taparía el filtro que hace EjecutorCapacitor.correr() en vez de
+      // ejercitarlo-: se consulta el rowid crudo con `last_insert_rowid()`,
+      // igual que haría el plugin real.
+      const [fila] = await this.motor.consultar<{ id: number }>(
+        'SELECT last_insert_rowid() AS id',
+      );
+      return { changes: { changes: r.cambios, lastId: fila?.id } };
     } catch (error) {
       if (propia) {
         await this.motor.ejecutar('ROLLBACK');

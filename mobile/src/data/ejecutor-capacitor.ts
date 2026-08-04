@@ -10,8 +10,20 @@
 import { esSentenciaInsert, type EjecutorSql, type ResultadoEscritura } from './ejecutor';
 import type { ConexionPluginSqlite } from './plugin-sqlite';
 
-/** `BEGIN`, `BEGIN TRANSACTION`, `COMMIT;`, `ROLLBACK`… en cualquier caja. */
-const CONTROL_DE_TRANSACCION = /^\s*(begin|commit|rollback|end)\b(\s+transaction\b)?\s*;?\s*$/i;
+/**
+ * `BEGIN`, `BEGIN TRANSACTION`, `BEGIN IMMEDIATE`, `BEGIN DEFERRED`,
+ * `BEGIN EXCLUSIVE`, `BEGIN IMMEDIATE TRANSACTION`, `COMMIT;`, `ROLLBACK`…
+ * en cualquier caja.
+ *
+ * Ancla la cadena completa (`^...$`) a propósito: así NO matchea
+ * `CREATE TRIGGER a BEGIN ... END` (empieza con CREATE, no con una de estas
+ * palabras), ni `ROLLBACK TO SAVEPOINT x` / `SAVEPOINT x` / `RELEASE x`
+ * (les sobra texto después del comando que la cadena no consume antes del
+ * `$`). Ver ejecutor-capacitor.test.ts para las pruebas que fijan ambos
+ * lados: lo que sí debe reconocer y lo que no.
+ */
+const CONTROL_DE_TRANSACCION =
+  /^\s*(begin|commit|rollback|end)\b(\s+(?:immediate|deferred|exclusive)\b)?(\s+transaction\b)?\s*;?\s*$/i;
 
 export class EjecutorCapacitor implements EjecutorSql {
   /**
