@@ -7,7 +7,7 @@
     "noUncheckedIndexedAccess": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "types": ["vitest/globals", "@types/node"]
+    "types": ["vitest/globals", "@types/node", "vite/client"]
   },
-  "include": ["src"]
+  "include": ["src", "src/**/*.svelte", "capacitor.config.ts"]
 }

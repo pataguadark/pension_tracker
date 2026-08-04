@@ -1,5 +1,6 @@
 node_modules/
 dist/
+.vite/
 
 # Script temporal de la prueba de interoperabilidad (tests/test_interoperabilidad_db.py):
 # se escribe y se borra en el mismo proceso, pero si este muere de golpe queda huérfano.

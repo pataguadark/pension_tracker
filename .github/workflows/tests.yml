@@ -33,3 +33,5 @@ jobs:
         run: npm run typecheck --prefix mobile
       - name: Tests de TypeScript (incluye fixtures doradas)
         run: npm test --prefix mobile
+      - name: Construir el bundle
+        run: npm run build --prefix mobile
