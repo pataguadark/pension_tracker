@@ -291,6 +291,19 @@ describe('Historial — badge de multipago', () => {
     expect(container.querySelectorAll('.badge-multipago')).toHaveLength(0);
   });
 
+  it('el badge de una fila se lee con SU año, no con el de otra fila', async () => {
+    // Enero de 2024 tiene dos pagos y enero de 2025 uno solo. Si la fila
+    // consultara el conteo con un año que no es el suyo (o solo con el mes),
+    // las tres filas mostrarían lo mismo: o las tres con badge o ninguna. Con
+    // dos años que tienen el mismo mes pero distinta cantidad de pagos, el
+    // resultado correcto y el equivocado se distinguen.
+    const estado = await montarEstado([pagoDe(2024, 1), pagoDe(2024, 1), pagoDe(2025, 1)]);
+    const { container } = render(Historial, { estado });
+    const badges = filasDe(container).map((f) => texto(f.querySelector('.badge-multipago')));
+    // Orden: enero 2025 (sin badge), enero 2024 x2 (con badge).
+    expect(badges).toEqual(['', '×2', '×2']);
+  });
+
   it('el conteo sigue al filtro por año', async () => {
     // 2024 tiene un solo marzo; 2025 tiene dos. Filtrando a 2024 no debe
     // quedar badge, y filtrando a 2025 deben quedar dos.
