@@ -65,9 +65,17 @@ export class EstadoApp {
       this.todosLosPagos = await this.pagos.obtenerTodosLosPagos();
       this.aniosDisponibles = aniosDe(this.todosLosPagos);
 
+      // `obtenerUtmReferencia` y NO `obtenerUtm`: el primero lee solo la base
+      // local; el segundo sale a mindicador.cl y cae a la base si falla.
+      // El escritorio, en /historial, usa el equivalente que no toca la red
+      // (`utm_service.obtener_utm_referencia`). Salir a la red acá haría dos
+      // cosas malas: pedir un valor en vivo cada vez que se abre la pantalla,
+      // y —si el mes actual no está guardado— mostrar en el teléfono una UTM
+      // distinta de la que ve el escritorio con la MISMA base de datos, que
+      // es justo la divergencia que este port existe para evitar.
       const hoy = new Date();
-      const ref = await this.utm.obtenerUtm(hoy.getFullYear(), hoy.getMonth() + 1);
-      this.utmReferencia = ref.utm;
+      const ref = await this.utm.obtenerUtmReferencia(hoy.getFullYear(), hoy.getMonth() + 1);
+      this.utmReferencia = ref.utmValor;
 
       this.anioFiltro = null;
       this.recalcular(this.todosLosPagos);

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import { EjecutorNode } from '../data/ejecutor-node';
 import { inicializarBd } from '../data/esquema';
@@ -6,18 +6,31 @@ import { RepositorioPagos, RepositorioUtm } from '../data/repositorio';
 import { ServicioUtm } from '../utm/servicio-utm';
 import { EstadoApp } from './estado.svelte';
 
-/** Cliente HTTP que nunca sale a la red: fuerza el camino de degradación. */
-const httpCaido = {
-  obtenerJson: async () => { throw new Error('sin red'); },
-};
+/**
+ * Cliente HTTP que cuenta sus llamadas y, si alguien lo usa, devuelve un
+ * valor DISTINTO del que hay guardado.
+ *
+ * Que devuelva algo en vez de fallar es deliberado: un cliente que lanza
+ * dejaría pasar una implementación que sale a la red y se recupera del
+ * error, que es exactamente la que no queremos. Con este, salir a la red
+ * cambia el resultado y la prueba lo nota.
+ */
+class HttpQueCuenta {
+  llamadas = 0;
+  async obtenerJson(): Promise<unknown> {
+    this.llamadas++;
+    return { serie: [{ fecha: '2025-06-01T04:00:00.000Z', valor: 99_999 }] };
+  }
+}
 
 async function montar() {
   const ejecutor = new EjecutorNode(':memory:');
   await inicializarBd(ejecutor);
   const pagos = new RepositorioPagos(ejecutor);
   const repoUtm = new RepositorioUtm(ejecutor);
-  const estado = new EstadoApp(pagos, new ServicioUtm(httpCaido, repoUtm));
-  return { estado, pagos, repoUtm };
+  const http = new HttpQueCuenta();
+  const estado = new EstadoApp(pagos, new ServicioUtm(http, repoUtm));
+  return { estado, pagos, repoUtm, http };
 }
 
 const pagoDe = (anio: number, mes: number, pagado: number) => ({
@@ -111,6 +124,22 @@ describe('EstadoApp', () => {
     expect(estado.error).toBeNull();
   });
 
+  it('no sale a la red al cargar el historial', async () => {
+    // El escritorio, en /historial, usa obtener_utm_referencia(), que lee
+    // SOLO la base. Si acá se usara obtenerUtm(), el teléfono pediría un
+    // valor en vivo cada vez que se abre la pantalla y —cuando el mes actual
+    // no está guardado— mostraría una UTM distinta de la que ve el
+    // escritorio con la MISMA base de datos.
+    const { estado, pagos, repoUtm, http } = await montar();
+    await repoUtm.guardarUtm(2025, 6, 66_000);
+    await pagos.insertarPago(pagoDe(2025, 1, 100_000));
+    await estado.cargar();
+
+    expect(http.llamadas).toBe(0);
+    // Y usa lo guardado, no lo que devolvería la red (99.999).
+    expect(estado.utmReferencia).toBe(66_000);
+  });
+
   it('con UTM guardada calcula el desbalance ajustado', async () => {
     const { estado, pagos, repoUtm } = await montar();
     await repoUtm.guardarUtm(2025, 6, 66_000);
@@ -137,7 +166,7 @@ describe('EstadoApp', () => {
       correr: async () => ({ cambios: 0, ultimoId: null }),
       consultar: async () => { throw new Error('base corrupta'); },
     });
-    const estadoRoto = new EstadoApp(roto, new ServicioUtm(httpCaido, repoUtm));
+    const estadoRoto = new EstadoApp(roto, new ServicioUtm(new HttpQueCuenta(), repoUtm));
     await estadoRoto.cargar();
     expect(estadoRoto.cargando).toBe(false);
     expect(estadoRoto.error).toContain('base corrupta');
