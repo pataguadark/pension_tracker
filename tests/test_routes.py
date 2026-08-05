@@ -445,3 +445,30 @@ def test_respaldar_con_csrf_descarga_bd_valida(client, tmp_path):
     conn = sqlite3.connect(backup_path)
     assert conn.execute("SELECT COUNT(*) FROM pagos").fetchone() == (1,)
     conn.close()
+
+
+def test_historial_muestra_el_factor_con_coma(client):
+    """
+    El factor UTM se muestra con coma decimal, igual que en registro y
+    edición y que en la app móvil.
+
+    Antes el historial imprimía el float crudo de Python vía Jinja
+    ("3.0561", con punto) mientras el resto de la aplicación usaba
+    fmt_factor ("3,0561"). La coma es el separador decimal chileno: el
+    historial era el que estaba mal, y la diferencia se veía además entre
+    el escritorio y el teléfono para la MISMA base de datos.
+    """
+    _registrar_pago(client)
+    html = client.get("/historial").get_data(as_text=True)
+
+    assert "3,0561" in html
+    assert "3.0561" not in html
+
+
+def test_historial_no_muestra_decimales_de_mas_en_el_factor(client):
+    """Un factor entero se muestra como '3', no como '3.0' ni '3,0'."""
+    _registrar_pago(client, utm_factor="3", monto_pagado="209.667")
+    html = client.get("/historial").get_data(as_text=True)
+
+    assert ">3<" in html.replace(" ", "").replace("\n", "")
+    assert "3.0" not in html

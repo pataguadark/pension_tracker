@@ -145,7 +145,11 @@
                     </td>
                     <td class="td-fecha" data-label="Fecha reg.">{{ p.fecha }}</td>
                     <td class="td-mono td-factor" data-label="Factor UTM">
-                        {% if factor_display %}{{ factor_display }}{% else %}—{% endif %}
+                        {# fmt_factor y no el float crudo: el resto de la app
+                           (registro, edición, endpoint de UTM) muestra el
+                           factor con coma decimal, que es la chilena. Esta
+                           celda era la única que imprimía "3.0561". #}
+                        {% if factor_display %}{{ factor_display | fmt_factor }}{% else %}—{% endif %}
                     </td>
                     <td class="td-mono" data-label="UTM en $">
                         ${{ "{:,.0f}".format(p.utm_valor).replace(",", ".") }}

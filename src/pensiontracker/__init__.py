@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 from flask import Flask, send_from_directory
 from flask_wtf.csrf import CSRFProtect
 
-from pensiontracker import config
+from pensiontracker import config, formatters
 from pensiontracker.database import db_manager
 from pensiontracker.services import utm_service
 
@@ -68,6 +68,14 @@ def create_app(test_config: dict | None = None) -> Flask:
         return send_from_directory(
             app.static_folder, "sw.js", mimetype="application/javascript"
         )
+
+    # `fmt_factor` como filtro de plantilla: hasta ahora las rutas lo
+    # aplicaban antes de renderizar (registro y edición reciben el factor ya
+    # formateado), pero el historial imprimía el float crudo de Python y
+    # mostraba "3.0561" con punto donde el resto de la app muestra "3,0561".
+    # La coma es el separador decimal chileno, así que el historial era el
+    # que estaba mal.
+    app.jinja_env.filters["fmt_factor"] = formatters.fmt_factor
 
     from pensiontracker.routes.export import export_bp
     from pensiontracker.routes.pagos import pagos_bp
