@@ -4,9 +4,22 @@
 
 <script lang="ts">
   import Encabezado from './Encabezado.svelte';
+  import type { EstadoApp } from './estado.svelte';
+  import Historial from './Historial.svelte';
   import Mensajes from './Mensajes.svelte';
 
-  let { vistaInicial = 'historial' as Vista } = $props();
+  let {
+    vistaInicial = 'historial' as Vista,
+    estado = null,
+  }: {
+    vistaInicial?: Vista;
+    /**
+     * Lo inyecta quien abre la base de datos (main.ts, en la etapa que
+     * cablea el almacenamiento). Mientras sea null el historial se ve como
+     * uno sin pagos, que es lo que efectivamente hay.
+     */
+    estado?: EstadoApp | null;
+  } = $props();
   let vista = $state<Vista>(vistaInicial);
 </script>
 
@@ -19,7 +32,7 @@
 
 <main class="main-content">
   {#if vista === 'historial'}
-    <p>Historial</p>
+    <Historial {estado} alRegistrar={() => (vista = 'registro')} />
   {:else}
     <p>Registrar Pago</p>
   {/if}

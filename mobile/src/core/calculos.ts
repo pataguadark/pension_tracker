@@ -105,6 +105,34 @@ export function factorDePago(pago: Pago): number | null {
 }
 
 /**
+ * Igual que factorDePago(), pero para MOSTRAR una fila ya persistida: si
+ * el pago trae un utmFactor/utmValor no finito (posible en datos
+ * guardados por una versión anterior, ver desbalanceUtmMensualTolerante),
+ * devuelve null en vez de lanzar.
+ *
+ * Sin esto, la columna "Factor UTM" del historial tumbaría el render de
+ * la pantalla completa por una sola fila corrupta, y el usuario perdería
+ * de vista TODO su historial. El escritorio no tiene el problema porque
+ * Jinja imprime `inf` sin quejarse; acá una excepción durante el render
+ * deja la pantalla en blanco.
+ *
+ * El catch está acotado a ErrorDatoNoFinito por el mismo motivo que en
+ * desbalanceUtmMensualTolerante: un `catch` desnudo escondería bugs
+ * reales (p. ej. una fila `null`, que lanza TypeError) haciéndolos pasar
+ * por "sin factor".
+ */
+export function factorDePagoTolerante(pago: Pago): number | null {
+  try {
+    return factorDePago(pago);
+  } catch (error) {
+    if (error instanceof ErrorDatoNoFinito) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+/**
  * Diferencia de un pago en unidades UTM, a la tasa de ese mes.
  * Mismo signo que el desbalance en pesos. Null si faltan datos.
  */

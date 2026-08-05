@@ -9,7 +9,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { calcularDesbalanceAcumuladoUtm } from './calculos';
+import { calcularDesbalanceAcumuladoUtm, factorDePagoTolerante } from './calculos';
 import type { Pago } from './tipos';
 
 const pagoValido: Pago = {
@@ -59,5 +59,42 @@ describe('desbalanceUtmMensualTolerante (ejercitado vía calcularDesbalanceAcumu
     const resultado = calcularDesbalanceAcumuladoUtm(70000, [pagoValido, pagoCorrupto]);
 
     expect(resultado.estado).toBe('DEUDA');
+  });
+});
+
+describe('factorDePagoTolerante', () => {
+  /**
+   * La columna "Factor UTM" del historial pinta una fila a la vez. Si
+   * usara factorDePago() directo, una sola fila con utm_factor no finito
+   * —dato que la propia calculos.ts documenta como posible en bases
+   * guardadas por versiones antiguas— lanzaría durante el render y
+   * dejaría la pantalla completa en blanco: el usuario perdería el
+   * historial entero por un registro malo. El escritorio no tiene ese
+   * problema porque Jinja imprime `inf` sin quejarse.
+   */
+  it('devuelve el factor guardado cuando el pago lo trae', () => {
+    expect(factorDePagoTolerante(pagoValido)).toBe(3);
+  });
+
+  it('deriva el factor de cuota / valor UTM cuando no viene guardado', () => {
+    const sinFactor: Pago = { ...pagoValido, utmFactor: null, cuotaPactada: 134588 };
+    expect(factorDePagoTolerante(sinFactor)).toBeCloseTo(2, 10);
+  });
+
+  it('devuelve null —y no lanza— con un factor no finito', () => {
+    const corrupto: Pago = { ...pagoValido, utmFactor: Infinity };
+    expect(factorDePagoTolerante(corrupto)).toBeNull();
+  });
+
+  it('devuelve null —y no lanza— con un valor UTM no finito', () => {
+    const corrupto: Pago = { ...pagoValido, utmFactor: null, utmValor: NaN };
+    expect(factorDePagoTolerante(corrupto)).toBeNull();
+  });
+
+  it('no traga errores que no sean de validación de finitud', () => {
+    // Mismo criterio que desbalanceUtmMensualTolerante: un `catch` desnudo
+    // convertiría un bug de programación (una fila `null`) en un inocente
+    // "sin factor".
+    expect(() => factorDePagoTolerante(null as unknown as Pago)).toThrow();
   });
 });

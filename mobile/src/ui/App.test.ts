@@ -53,6 +53,22 @@ describe('App', () => {
     );
   });
 
+  it('la vista de historial es la pantalla de historial, no un marcador', async () => {
+    // Antes acá había un `<p>Historial</p>`. Si volviera, la app arrancaría
+    // mostrando una palabra suelta en vez del historial y nada más en la
+    // suite lo notaría: Historial.test.ts monta el componente directamente.
+    const { container } = render(App);
+    expect(container.querySelector('.page-historial')).toBeInTheDocument();
+    expect(screen.getByText('Sin pagos registrados')).toBeInTheDocument();
+  });
+
+  it('desde el historial vacío se llega a registrar un pago', async () => {
+    const user = userEvent.setup();
+    render(App);
+    await user.click(screen.getByRole('link', { name: '+ Registrar primer pago' }));
+    expect(screen.getByRole('link', { name: 'Registrar Pago' })).toHaveClass('active');
+  });
+
   it('la navegación no recarga la página al elegir una vista', async () => {
     // jsdom no navega de verdad; lo que sí podemos comprobar es que el clic
     // llegó con preventDefault() aplicado. fireEvent devuelve el resultado de
