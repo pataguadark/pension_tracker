@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen } from '@testing-library/svelte';
+import { fireEvent, render, screen } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
 
@@ -51,5 +51,63 @@ describe('App', () => {
       'href',
       'https://www.paypal.com/donate/?hosted_button_id=2PFWY58A55FQE',
     );
+  });
+
+  it('la navegación no recarga la página al elegir una vista', async () => {
+    // jsdom no navega de verdad; lo que sí podemos comprobar es que el clic
+    // llegó con preventDefault() aplicado. fireEvent devuelve el resultado de
+    // dispatchEvent, que es false cuando el evento (cancelable, como 'click')
+    // fue cancelado.
+    render(App);
+    const enlace = screen.getByRole('link', { name: 'Registrar Pago' });
+    const noCancelado = fireEvent.click(enlace);
+    expect(await noCancelado).toBe(false);
+  });
+});
+
+describe('Encabezado — menú móvil', () => {
+  beforeEach(() => mensajes.limpiar());
+
+  // jsdom no aplica media queries: no podemos comprobar que la navegación se
+  // vea u oculte en un teléfono. En su lugar probamos el mecanismo del que
+  // depende esa visibilidad (la clase "open" en .main-nav y el botón que la
+  // controla), que es lo que el CSS ya sabe interpretar.
+
+  it('el botón para abrir el menú existe y es accesible por su etiqueta', () => {
+    render(App);
+    expect(screen.getByRole('button', { name: 'Abrir menú' })).toBeInTheDocument();
+  });
+
+  it('el menú empieza cerrado', () => {
+    render(App);
+    expect(screen.getByRole('navigation')).not.toHaveClass('open');
+  });
+
+  it('al pulsar el botón, el menú se abre y aria-expanded pasa a "true"', async () => {
+    const user = userEvent.setup();
+    render(App);
+    const boton = screen.getByRole('button', { name: 'Abrir menú' });
+    await user.click(boton);
+    expect(screen.getByRole('navigation')).toHaveClass('open');
+    expect(boton).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('al pulsarlo de nuevo, el menú se cierra y aria-expanded vuelve a "false"', async () => {
+    const user = userEvent.setup();
+    render(App);
+    const boton = screen.getByRole('button', { name: 'Abrir menú' });
+    await user.click(boton);
+    await user.click(boton);
+    expect(screen.getByRole('navigation')).not.toHaveClass('open');
+    expect(boton).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('al elegir una vista con el menú abierto, el menú se cierra', async () => {
+    const user = userEvent.setup();
+    render(App);
+    await user.click(screen.getByRole('button', { name: 'Abrir menú' }));
+    expect(screen.getByRole('navigation')).toHaveClass('open');
+    await user.click(screen.getByRole('link', { name: 'Registrar Pago' }));
+    expect(screen.getByRole('navigation')).not.toHaveClass('open');
   });
 });
