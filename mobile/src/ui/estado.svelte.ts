@@ -10,17 +10,38 @@
  */
 
 import {
+  calcularCuotaPactada,
   calcularDesbalanceAcumuladoUtm,
+  calcularDesbalanceMensual,
   obtenerHistorialDesbalances,
   resumirEstadoCuenta,
   type FilaHistorial,
 } from '../core/calculos';
+import { limpiarFactor } from '../core/formatters';
 import type { Pago } from '../core/tipos';
-import type { RepositorioPagos } from '../data/repositorio';
+import type {
+  RepositorioConfiguracion, RepositorioPagos, RepositorioUtm,
+} from '../data/repositorio';
 import type { ServicioUtm } from '../utm/servicio-utm';
+import type { ValoresFormulario } from './formulario';
 
 type Resumen = ReturnType<typeof resumirEstadoCuenta>;
 type ResumenUtm = ReturnType<typeof calcularDesbalanceAcumuladoUtm>;
+
+/**
+ * Clave del factor UTM predeterminado en la tabla `configuracion`.
+ *
+ * Literal de db_manager.CLAVE_FACTOR_UTM_PREDETERMINADO (db_manager.py:42):
+ * la misma base la comparten escritorio y teléfono, así que el texto de la
+ * clave tiene que coincidir carácter a carácter.
+ */
+export const CLAVE_FACTOR_UTM_PREDETERMINADO = 'factor_utm_predeterminado';
+
+/** Lo que devuelve `registrarPago`, para que la pantalla arme su mensaje. */
+export interface ResultadoRegistro {
+  pagoId: number;
+  desbalance: number;
+}
 
 /** Años de un conjunto de pagos, de más reciente a más antiguo, sin repetir. */
 function aniosDe(pagos: Pago[]): number[] {
@@ -42,6 +63,12 @@ export class EstadoApp {
   aniosDisponibles = $state<number[]>([]);
   anioFiltro = $state<number | null>(null);
   utmReferencia = $state<number | null>(null);
+  /**
+   * Factor con el que arranca el formulario de registro: el guardado como
+   * predeterminado si lo hay, y si no el del último pago. Port de la
+   * precarga de `registro()` (routes/pagos.py:113-119).
+   */
+  factorPrecargado = $state<number | null>(null);
 
   /** Todos los pagos cargados, tal como vienen del repositorio. */
   private todosLosPagos: Pago[] = [];
@@ -49,6 +76,15 @@ export class EstadoApp {
   constructor(
     private readonly pagos: RepositorioPagos,
     private readonly utm: ServicioUtm,
+    /**
+     * Se recibe además del ServicioUtm porque acá hace falta ESCRIBIR en
+     * `utm_historial`, no solo leer: tanto `procesar_pago` como
+     * `editar_pago_post` guardan la UTM del período, y en el escritorio lo
+     * hacen llamando a `db_manager.guardar_utm` directo, no pasando por
+     * utm_service.
+     */
+    private readonly repoUtm: RepositorioUtm,
+    private readonly config: RepositorioConfiguracion,
   ) {}
 
   /**
@@ -77,6 +113,8 @@ export class EstadoApp {
       const ref = await this.utm.obtenerUtmReferencia(hoy.getFullYear(), hoy.getMonth() + 1);
       this.utmReferencia = ref.utmValor;
 
+      this.factorPrecargado = await this.calcularFactorPrecargado();
+
       this.anioFiltro = null;
       this.recalcular(this.todosLosPagos);
     } catch (e) {
@@ -96,6 +134,104 @@ export class EstadoApp {
     const pagosDelFiltro =
       anio === null ? this.todosLosPagos : this.todosLosPagos.filter((p) => p.anioPago === anio);
     this.recalcular(pagosDelFiltro);
+  }
+
+  /** Un pago por su id, o null. Lo usa la pantalla de edición al abrirse. */
+  async obtenerPago(id: number): Promise<Pago | null> {
+    return this.pagos.obtenerPagoPorId(id);
+  }
+
+  /**
+   * Registra un pago nuevo. Port de
+   * `calculation_service.procesar_pago`: calcula la cuota, calcula el
+   * desbalance, inserta y guarda la UTM del período en `utm_historial`.
+   *
+   * Recargar después equivale a la redirección a /historial del escritorio,
+   * que vuelve a consultarlo todo: el filtro por año se pierde igual que
+   * allá.
+   */
+  async registrarPago(valores: ValoresFormulario): Promise<ResultadoRegistro> {
+    const cuotaPactada = calcularCuotaPactada(valores.utmFactor, valores.utmValor);
+    const { diferencia } = calcularDesbalanceMensual(valores.montoPagado, cuotaPactada);
+
+    const pagoId = await this.pagos.insertarPago({
+      fecha: valores.fecha,
+      mesPago: valores.mesPago,
+      anioPago: valores.anioPago,
+      utmValor: valores.utmValor,
+      cuotaPactada,
+      montoPagado: valores.montoPagado,
+      desbalance: diferencia,
+      utmFactor: valores.utmFactor,
+    });
+
+    // Paso 4 de procesar_pago: la UTM usada queda auditada y sirve de
+    // respaldo cuando no hay red.
+    await this.repoUtm.guardarUtm(valores.anioPago, valores.mesPago, valores.utmValor);
+
+    await this.cargar();
+    return { pagoId, desbalance: diferencia };
+  }
+
+  /**
+   * Reescribe un pago existente. Port de `editar_pago_post`
+   * (routes/pagos.py:250-297), incluida la comprobación de existencia
+   * ANTES de escribir nada y el `guardar_utm` posterior.
+   *
+   * Devuelve false si el id no existe, para que la pantalla avise con el
+   * mismo texto que el flash del escritorio.
+   */
+  async actualizarPago(id: number, valores: ValoresFormulario): Promise<boolean> {
+    if ((await this.pagos.obtenerPagoPorId(id)) === null) {
+      return false;
+    }
+
+    const cuotaPactada = calcularCuotaPactada(valores.utmFactor, valores.utmValor);
+    const { diferencia } = calcularDesbalanceMensual(valores.montoPagado, cuotaPactada);
+
+    await this.pagos.actualizarPago(id, {
+      fecha: valores.fecha,
+      mesPago: valores.mesPago,
+      anioPago: valores.anioPago,
+      utmValor: valores.utmValor,
+      cuotaPactada,
+      montoPagado: valores.montoPagado,
+      desbalance: diferencia,
+      utmFactor: valores.utmFactor,
+    });
+
+    await this.repoUtm.guardarUtm(valores.anioPago, valores.mesPago, valores.utmValor);
+
+    await this.cargar();
+    return true;
+  }
+
+  /** Borra un pago. Devuelve false si el id no existe (`eliminar_pago`). */
+  async eliminarPago(id: number): Promise<boolean> {
+    const eliminado = await this.pagos.eliminarPago(id);
+    await this.cargar();
+    return eliminado;
+  }
+
+  /**
+   * El predeterminado manda sobre el último factor usado, igual que
+   * `registro()`.
+   *
+   * Desviación consciente: el escritorio hace `float(...)` sobre el valor
+   * guardado y un texto ilegible le da un 500. Acá la carga es la que pinta
+   * la pantalla entera, así que un valor corrupto se trata como si no
+   * estuviera en vez de dejar la app en blanco.
+   */
+  private async calcularFactorPrecargado(): Promise<number | null> {
+    const guardado = await this.config.obtenerConfiguracion(CLAVE_FACTOR_UTM_PREDETERMINADO);
+    if (guardado !== null) {
+      try {
+        return limpiarFactor(guardado);
+      } catch {
+        // Se ignora y se cae al último factor usado.
+      }
+    }
+    return this.repoUtm.obtenerUltimoFactorUtm();
   }
 
   /** Deriva filas, resumen y resumen UTM de un conjunto de pagos ya elegido. */

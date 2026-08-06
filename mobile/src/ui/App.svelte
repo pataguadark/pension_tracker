@@ -1,12 +1,22 @@
 <script lang="ts" module>
-  export type Vista = 'historial' | 'registro';
+  /**
+   * Las tres pantallas. La de edición necesita además saber QUÉ pago se
+   * está editando; ese dato NO va dentro del tipo (`{ vista: 'edicion', id }`)
+   * porque el Encabezado compara `vista` con cadenas para pintar el enlace
+   * activo, y un objeto lo obligaría a mirar dentro. En su lugar el id vive
+   * en su propio `$state` al lado, igual que el `<int:pago_id>` del
+   * escritorio viaja en la URL y no en el nombre de la vista.
+   */
+  export type Vista = 'historial' | 'registro' | 'edicion';
 </script>
 
 <script lang="ts">
+  import Edicion from './Edicion.svelte';
   import Encabezado from './Encabezado.svelte';
   import type { EstadoApp } from './estado.svelte';
   import Historial from './Historial.svelte';
   import Mensajes from './Mensajes.svelte';
+  import Registro from './Registro.svelte';
 
   let {
     vistaInicial = 'historial' as Vista,
@@ -21,20 +31,50 @@
     estado?: EstadoApp | null;
   } = $props();
   let vista = $state<Vista>(vistaInicial);
+  /** Pago que está abierto en la pantalla de edición. */
+  let pagoEnEdicion = $state<number | null>(null);
+
+  function editar(id: number): void {
+    pagoEnEdicion = id;
+    vista = 'edicion';
+  }
+
+  /**
+   * El menú solo ofrece 'historial' y 'registro': a 'edicion' se entra por
+   * el ✎ de una fila, así que al elegir del menú se suelta el pago abierto.
+   */
+  function cambiar(v: Vista): void {
+    pagoEnEdicion = null;
+    vista = v;
+  }
+
+  function volverAlHistorial(): void {
+    pagoEnEdicion = null;
+    vista = 'historial';
+  }
 </script>
 
 <div class="bg-grid"></div>
 <div class="bg-glow"></div>
 
-<Encabezado {vista} alCambiar={(v) => (vista = v)} />
+<Encabezado {vista} alCambiar={cambiar} />
 
 <Mensajes />
 
 <main class="main-content">
   {#if vista === 'historial'}
-    <Historial {estado} alRegistrar={() => (vista = 'registro')} />
+    <Historial {estado} alRegistrar={() => cambiar('registro')} alEditar={editar} />
+  {:else if vista === 'edicion' && pagoEnEdicion !== null}
+    <!--
+      La clave fuerza a remontar al cambiar de pago: Edicion lee el pago una
+      sola vez al abrirse, así que sin esto pasar del ✎ de una fila al de
+      otra dejaría el formulario con los datos del primero.
+    -->
+    {#key pagoEnEdicion}
+      <Edicion {estado} pagoId={pagoEnEdicion} alVolver={volverAlHistorial} />
+    {/key}
   {:else}
-    <p>Registrar Pago</p>
+    <Registro {estado} alVolver={volverAlHistorial} />
   {/if}
 </main>
 

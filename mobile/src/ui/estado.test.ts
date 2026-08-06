@@ -2,9 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import { EjecutorNode } from '../data/ejecutor-node';
 import { inicializarBd } from '../data/esquema';
-import { RepositorioPagos, RepositorioUtm } from '../data/repositorio';
+import {
+  RepositorioConfiguracion, RepositorioPagos, RepositorioUtm,
+} from '../data/repositorio';
 import { ServicioUtm } from '../utm/servicio-utm';
-import { EstadoApp } from './estado.svelte';
+import { CLAVE_FACTOR_UTM_PREDETERMINADO, EstadoApp } from './estado.svelte';
+import type { ValoresFormulario } from './formulario';
 
 /**
  * Cliente HTTP que cuenta sus llamadas y, si alguien lo usa, devuelve un
@@ -28,10 +31,24 @@ async function montar() {
   await inicializarBd(ejecutor);
   const pagos = new RepositorioPagos(ejecutor);
   const repoUtm = new RepositorioUtm(ejecutor);
+  const config = new RepositorioConfiguracion(ejecutor);
   const http = new HttpQueCuenta();
-  const estado = new EstadoApp(pagos, new ServicioUtm(http, repoUtm));
-  return { estado, pagos, repoUtm, http };
+  const estado = new EstadoApp(pagos, new ServicioUtm(http, repoUtm), repoUtm, config);
+  return {
+    estado, pagos, repoUtm, config, http,
+  };
 }
+
+/** Valores ya validados, como los entrega FormularioPago tras validarFormulario. */
+const valoresDe = (extra: Partial<ValoresFormulario> = {}): ValoresFormulario => ({
+  utmFactor: 3,
+  utmValor: 60_000,
+  montoPagado: 200_000,
+  mesPago: 3,
+  anioPago: 2025,
+  fecha: '2025-03-05',
+  ...extra,
+});
 
 const pagoDe = (anio: number, mes: number, pagado: number) => ({
   fecha: `${anio}-${String(mes).padStart(2, '0')}-05`,
@@ -166,9 +183,210 @@ describe('EstadoApp', () => {
       correr: async () => ({ cambios: 0, ultimoId: null }),
       consultar: async () => { throw new Error('base corrupta'); },
     });
-    const estadoRoto = new EstadoApp(roto, new ServicioUtm(new HttpQueCuenta(), repoUtm));
+    const ejecutorRoto = {
+      ejecutar: async () => {},
+      correr: async () => ({ cambios: 0, ultimoId: null }),
+      consultar: async () => { throw new Error('base corrupta'); },
+    };
+    const estadoRoto = new EstadoApp(
+      roto,
+      new ServicioUtm(new HttpQueCuenta(), repoUtm),
+      repoUtm,
+      new RepositorioConfiguracion(ejecutorRoto),
+    );
     await estadoRoto.cargar();
     expect(estadoRoto.cargando).toBe(false);
     expect(estadoRoto.error).toContain('base corrupta');
+  });
+});
+
+describe('EstadoApp — factor precargado para el registro', () => {
+  // Port de la precarga que hace `registro()` en routes/pagos.py:113-119.
+
+  it('sin nada guardado no hay factor que precargar', async () => {
+    const { estado } = await montar();
+    await estado.cargar();
+    expect(estado.factorPrecargado).toBeNull();
+  });
+
+  it('sin predeterminado usa el factor del último pago', async () => {
+    const { estado, pagos } = await montar();
+    await pagos.insertarPago({ ...pagoDe(2025, 1, 100_000), utmFactor: 2.5 });
+    await pagos.insertarPago({ ...pagoDe(2025, 2, 100_000), utmFactor: 4.25 });
+    await estado.cargar();
+    expect(estado.factorPrecargado).toBe(4.25);
+  });
+
+  it('el factor guardado como predeterminado gana sobre el del último pago', async () => {
+    const { estado, pagos, config } = await montar();
+    await pagos.insertarPago({ ...pagoDe(2025, 2, 100_000), utmFactor: 4.25 });
+    await config.guardarConfiguracion(CLAVE_FACTOR_UTM_PREDETERMINADO, '3,0561');
+    await estado.cargar();
+    expect(estado.factorPrecargado).toBe(3.0561);
+  });
+
+  it('un predeterminado corrupto no rompe la carga: cae al del último pago', async () => {
+    // Desviación consciente del escritorio: allá `float("basura")` revienta
+    // con 500. Acá la app se queda sin pantalla si la carga lanza, así que
+    // un valor ilegible se trata como si no estuviera.
+    const { estado, pagos, config } = await montar();
+    await pagos.insertarPago({ ...pagoDe(2025, 2, 100_000), utmFactor: 4.25 });
+    await config.guardarConfiguracion(CLAVE_FACTOR_UTM_PREDETERMINADO, 'basura');
+    await estado.cargar();
+    expect(estado.error).toBeNull();
+    expect(estado.factorPrecargado).toBe(4.25);
+  });
+});
+
+describe('EstadoApp — registrar un pago', () => {
+  it('inserta el pago y lo deja visible en las filas', async () => {
+    const { estado } = await montar();
+    await estado.cargar();
+
+    const { pagoId } = await estado.registrarPago(valoresDe());
+
+    expect(pagoId).toBeGreaterThan(0);
+    expect(estado.filas).toHaveLength(1);
+    expect(estado.filas[0]!.id).toBe(pagoId);
+    expect(estado.filas[0]!.cuotaPactada).toBe(180_000);
+    expect(estado.filas[0]!.montoPagado).toBe(200_000);
+    expect(estado.filas[0]!.utmFactor).toBe(3);
+    expect(estado.filas[0]!.fecha).toBe('2025-03-05');
+  });
+
+  it('calcula el desbalance del mes y lo devuelve', async () => {
+    const { estado } = await montar();
+    await estado.cargar();
+    const { desbalance } = await estado.registrarPago(valoresDe());
+    expect(desbalance).toBe(20_000);
+    expect(estado.filas[0]!.desbalance).toBe(20_000);
+  });
+
+  it('guarda la UTM del período en utm_historial', async () => {
+    // Paso 4 de calculation_service.procesar_pago: sin esto la UTM usada no
+    // queda auditada ni sirve de respaldo cuando no hay red.
+    const { estado, repoUtm } = await montar();
+    await estado.cargar();
+    await estado.registrarPago(valoresDe({ anioPago: 2025, mesPago: 3, utmValor: 61_000 }));
+    expect((await repoUtm.obtenerUtmGuardada(2025, 3))?.utmValor).toBe(61_000);
+  });
+
+  it('recarga el resumen y los años disponibles', async () => {
+    const { estado } = await montar();
+    await estado.cargar();
+    expect(estado.resumen.cantidadPagos).toBe(0);
+
+    await estado.registrarPago(valoresDe({ anioPago: 2024 }));
+
+    expect(estado.resumen.cantidadPagos).toBe(1);
+    expect(estado.resumen.totalPagado).toBe(200_000);
+    expect(estado.aniosDisponibles).toEqual([2024]);
+  });
+
+  it('deja el historial sin filtro, como la redirección del escritorio', async () => {
+    const { estado, pagos } = await montar();
+    await pagos.insertarPago(pagoDe(2024, 5, 100_000));
+    await estado.cargar();
+    await estado.filtrarPorAnio(2024);
+
+    await estado.registrarPago(valoresDe({ anioPago: 2025 }));
+
+    expect(estado.anioFiltro).toBeNull();
+    expect(estado.filas).toHaveLength(2);
+  });
+});
+
+describe('EstadoApp — actualizar un pago', () => {
+  it('recalcula la cuota y el desbalance con el factor y la UTM nuevos', async () => {
+    const { estado, pagos } = await montar();
+    const id = await pagos.insertarPago(pagoDe(2025, 1, 100_000));
+    await estado.cargar();
+
+    const ok = await estado.actualizarPago(id, valoresDe({
+      utmFactor: 4, utmValor: 70_000, montoPagado: 250_000, mesPago: 2, fecha: '2025-02-05',
+    }));
+
+    expect(ok).toBe(true);
+    expect(estado.filas).toHaveLength(1);
+    expect(estado.filas[0]!.cuotaPactada).toBe(280_000);
+    expect(estado.filas[0]!.desbalance).toBe(-30_000);
+    expect(estado.filas[0]!.mesPago).toBe(2);
+    expect(estado.filas[0]!.utmValor).toBe(70_000);
+    expect(estado.filas[0]!.utmFactor).toBe(4);
+  });
+
+  it('guarda la UTM del período editado en utm_historial', async () => {
+    // editar_pago_post llama a db_manager.guardar_utm después de actualizar
+    // (routes/pagos.py:283). Es fácil de perder al portar y nada más lo nota.
+    const { estado, pagos, repoUtm } = await montar();
+    const id = await pagos.insertarPago(pagoDe(2025, 1, 100_000));
+    await estado.cargar();
+
+    await estado.actualizarPago(id, valoresDe({
+      utmValor: 70_000, mesPago: 2, anioPago: 2026,
+    }));
+
+    expect((await repoUtm.obtenerUtmGuardada(2026, 2))?.utmValor).toBe(70_000);
+  });
+
+  it('recarga el resumen', async () => {
+    const { estado, pagos } = await montar();
+    const id = await pagos.insertarPago(pagoDe(2025, 1, 100_000));
+    await estado.cargar();
+    expect(estado.resumen.totalPagado).toBe(100_000);
+
+    await estado.actualizarPago(id, valoresDe({ montoPagado: 250_000 }));
+
+    expect(estado.resumen.totalPagado).toBe(250_000);
+  });
+
+  it('con un id inexistente devuelve false y no escribe nada', async () => {
+    const { estado, repoUtm } = await montar();
+    await estado.cargar();
+
+    const ok = await estado.actualizarPago(999, valoresDe({ anioPago: 2030, mesPago: 7 }));
+
+    expect(ok).toBe(false);
+    expect(estado.filas).toHaveLength(0);
+    // Ni siquiera la UTM: el escritorio corta antes de tocar la base.
+    expect(await repoUtm.obtenerUtmGuardada(2030, 7)).toBeNull();
+  });
+});
+
+describe('EstadoApp — eliminar un pago', () => {
+  it('lo saca de las filas y recarga el resumen', async () => {
+    const { estado, pagos } = await montar();
+    const id = await pagos.insertarPago(pagoDe(2025, 1, 100_000));
+    await pagos.insertarPago(pagoDe(2025, 2, 150_000));
+    await estado.cargar();
+    expect(estado.resumen.cantidadPagos).toBe(2);
+
+    const ok = await estado.eliminarPago(id);
+
+    expect(ok).toBe(true);
+    expect(estado.filas).toHaveLength(1);
+    expect(estado.filas[0]!.mesPago).toBe(2);
+    expect(estado.resumen.cantidadPagos).toBe(1);
+    expect(estado.resumen.totalPagado).toBe(150_000);
+  });
+
+  it('con un id inexistente devuelve false y no cambia nada', async () => {
+    const { estado, pagos } = await montar();
+    await pagos.insertarPago(pagoDe(2025, 1, 100_000));
+    await estado.cargar();
+
+    expect(await estado.eliminarPago(999)).toBe(false);
+    expect(estado.filas).toHaveLength(1);
+  });
+});
+
+describe('EstadoApp — leer un pago suelto', () => {
+  it('devuelve el pago pedido y null si no existe', async () => {
+    const { estado, pagos } = await montar();
+    const id = await pagos.insertarPago(pagoDe(2025, 1, 100_000));
+    await estado.cargar();
+
+    expect((await estado.obtenerPago(id))?.montoPagado).toBe(100_000);
+    expect(await estado.obtenerPago(999)).toBeNull();
   });
 });

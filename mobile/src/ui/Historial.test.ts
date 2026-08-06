@@ -19,15 +19,20 @@
 import { fireEvent, render, screen } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { tick } from 'svelte';
-import { describe, expect, it } from 'vitest';
+import {
+  afterEach, describe, expect, it, vi,
+} from 'vitest';
 
 import type { Pago } from '../core/tipos';
 import { EjecutorNode } from '../data/ejecutor-node';
 import { inicializarBd } from '../data/esquema';
-import { RepositorioPagos, RepositorioUtm } from '../data/repositorio';
+import {
+  RepositorioConfiguracion, RepositorioPagos, RepositorioUtm,
+} from '../data/repositorio';
 import { ServicioUtm } from '../utm/servicio-utm';
 import { EstadoApp } from './estado.svelte';
 import Historial from './Historial.svelte';
+import { mensajes } from './mensajes.svelte';
 
 /** Cliente HTTP que falla: ninguna prueba puede depender de la red. */
 class HttpSinRed {
@@ -77,10 +82,18 @@ async function montarEstado(
   if (utmReferencia !== null) {
     await repoUtm.guardarUtm(2025, 6, utmReferencia);
   }
-  const estado = new EstadoApp(repoPagos, new ServicioUtm(new HttpSinRed(), repoUtm));
+  const estado = new EstadoApp(
+    repoPagos,
+    new ServicioUtm(new HttpSinRed(), repoUtm),
+    repoUtm,
+    new RepositorioConfiguracion(ejecutor),
+  );
   await estado.cargar();
   return estado;
 }
+
+/** Deja correr las promesas pendientes contra SQLite antes de aseverar. */
+const dejarCorrer = () => new Promise((r) => { setTimeout(r, 0); });
 
 /** Texto de un elemento con los espacios colapsados, como los ve el usuario. */
 function texto(el: Element | null | undefined): string {
@@ -245,6 +258,9 @@ describe('Historial — tabla de pagos', () => {
     expect(etiquetas).toEqual([
       'N°', 'Período', 'Fecha reg.', 'Factor UTM', 'UTM en $',
       'Cuota pactada', 'Pagado', 'Diferencia mes', 'Saldo corrido',
+      // La celda de acciones no lleva data-label: en el escritorio tampoco,
+      // porque los dos botones se explican solos.
+      null,
     ]);
   });
 
@@ -255,6 +271,8 @@ describe('Historial — tabla de pagos', () => {
     expect(th).toEqual([
       '#', 'Período', 'Fecha reg.', 'Factor UTM', 'UTM en $',
       'Cuota pactada', 'Pagado', 'Diferencia mes', 'Saldo corrido',
+      // El escritorio cierra con un <th> vacío sobre la columna de acciones.
+      '',
     ]);
   });
 });
@@ -578,5 +596,89 @@ describe('Historial — acceso a registrar', () => {
     render(Historial, { estado, alRegistrar: () => (llamado += 1) });
     await user.click(screen.getByRole('link', { name: '+ Nuevo pago' }));
     expect(llamado).toBe(1);
+  });
+});
+
+describe('Historial — acciones de cada fila', () => {
+  // El escritorio pone en cada fila un enlace de editar (✎) y un formulario
+  // de eliminar (✕) con `data-confirm` (historial.html:199-206). Sin ellos la
+  // pantalla de edición no tendría por dónde abrirse y el CSS de
+  // `.td-acciones` —incluida la regla de 44px bajo 768px— sería letra muerta.
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    mensajes.limpiar();
+  });
+
+  it('cada fila trae editar y eliminar dentro de .td-acciones', async () => {
+    const estado = await montarEstado([pagoDe(2025, 1)]);
+    const { container } = render(Historial, { estado });
+    const acciones = filasDe(container)[0]!.querySelector('.td-acciones');
+    expect(acciones).not.toBeNull();
+    expect(acciones!.querySelector('.btn-editar')?.textContent?.trim()).toBe('✎');
+    expect(acciones!.querySelector('.btn-eliminar')?.textContent?.trim()).toBe('✕');
+  });
+
+  it('los botones se identifican por el id del pago, como en el escritorio', async () => {
+    const estado = await montarEstado([pagoDe(2025, 1)]);
+    render(Historial, { estado });
+    const id = estado.filas[0]!.id;
+    expect(screen.getByRole('link', { name: `Editar pago #${id}` })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: `Eliminar pago #${id}` })).toBeInTheDocument();
+  });
+
+  it('pulsar editar avisa con el id del pago y no navega', async () => {
+    let editado: number | null = null;
+    const estado = await montarEstado([pagoDe(2025, 1)]);
+    render(Historial, { estado, alEditar: (id: number) => { editado = id; } });
+    const enlace = screen.getByRole('link', { name: /Editar pago/ });
+
+    expect(await fireEvent.click(enlace)).toBe(false);
+
+    expect(editado).toBe(estado.filas[0]!.id);
+  });
+
+  it('eliminar pide confirmación con el texto del escritorio', async () => {
+    const confirmar = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const estado = await montarEstado([pagoDe(2025, 1)]);
+    render(Historial, { estado });
+    const id = estado.filas[0]!.id;
+
+    await fireEvent.click(screen.getByRole('button', { name: /Eliminar pago/ }));
+    await dejarCorrer();
+
+    expect(confirmar).toHaveBeenCalledWith(
+      `¿Eliminar pago #${id}? Esta acción no se puede deshacer.`,
+    );
+  });
+
+  it('al cancelar la confirmación NO elimina', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const estado = await montarEstado([pagoDe(2025, 1)]);
+    render(Historial, { estado });
+
+    await fireEvent.click(screen.getByRole('button', { name: /Eliminar pago/ }));
+    await dejarCorrer();
+
+    expect(estado.filas).toHaveLength(1);
+    expect(mensajes.lista).toHaveLength(0);
+  });
+
+  it('al confirmar elimina, avisa y la fila desaparece', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const estado = await montarEstado([pagoDe(2025, 1), pagoDe(2025, 2)]);
+    const { container } = render(Historial, { estado });
+    const id = estado.filas[0]!.id;
+
+    await fireEvent.click(screen.getAllByRole('button', { name: /Eliminar pago/ })[0]!);
+    await dejarCorrer();
+    await tick();
+
+    expect(estado.filas).toHaveLength(1);
+    expect(filasDe(container)).toHaveLength(1);
+    expect(mensajes.lista.map((m) => m.texto)).toEqual([
+      `Pago #${id} eliminado correctamente.`,
+    ]);
+    expect(mensajes.lista[0]!.tipo).toBe('exito');
   });
 });

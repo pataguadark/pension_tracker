@@ -31,6 +31,25 @@ export function montoConSigno(monto: number): string {
   return `${signo}${formatearPesos(Math.abs(monto))}`;
 }
 
+/**
+ * Frase que describe el desbalance de un mes: la que el escritorio mete en
+ * el flash de "Pago registrado correctamente".
+ *
+ * Literal de `calcular_desbalance_mensual` (calculation_service.py:91-99).
+ * En el móvil vive acá y no en `core/calculos.ts` porque ese módulo dejó
+ * fuera las descripciones a propósito ("son presentación y se arman en la
+ * capa de interfaz").
+ */
+export function descripcionDesbalanceMes(diferencia: number): string {
+  if (diferencia > 0) {
+    return `Pagó ${formatearPesos(diferencia)} de más este mes.`;
+  }
+  if (diferencia < 0) {
+    return `Pagó ${formatearPesos(Math.abs(diferencia))} de menos este mes.`;
+  }
+  return 'Pago exacto. Sin diferencia.';
+}
+
 /** Clase de color de una cifra en la tabla, según su signo. */
 export function claseSigno(monto: number): string {
   return CLASES_SIGNO[estadoDe(monto)];

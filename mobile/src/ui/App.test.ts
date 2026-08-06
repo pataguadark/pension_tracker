@@ -69,6 +69,35 @@ describe('App', () => {
     expect(screen.getByRole('link', { name: 'Registrar Pago' })).toHaveClass('active');
   });
 
+  it('la vista de registro es la pantalla de registro, no un marcador', async () => {
+    // Antes acá había un `<p>Registrar Pago</p>`. Mismo riesgo que el
+    // marcador del historial: si volviera, el enlace del menú seguiría
+    // marcándose activo y la prueba de navegación no se enteraría.
+    const user = userEvent.setup();
+    const { container } = render(App);
+    await user.click(screen.getByRole('link', { name: 'Registrar Pago' }));
+    expect(container.querySelector('.page-registro')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Registrar Pago →' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Mes del pago')).toBeInTheDocument();
+  });
+
+  it('sin base de datos abierta, registrar avisa en vez de fingir que guardó', async () => {
+    // main.ts todavía monta App sin EstadoApp. Si el formulario se enviara
+    // en silencio, el usuario creería que su pago quedó guardado.
+    const user = userEvent.setup();
+    const { container } = render(App);
+    await user.click(screen.getByRole('link', { name: 'Registrar Pago' }));
+    await user.type(screen.getByLabelText(/Factor UTM pactado/), '3');
+    await user.type(screen.getByLabelText(/^Valor UTM/), '60000');
+    await user.type(screen.getByLabelText(/Monto efectivamente pagado/), '200000');
+    await fireEvent.submit(container.querySelector('form')!);
+
+    expect(mensajes.lista.map((m) => m.texto)).toContain(
+      'Error al procesar el pago: la base de datos no está abierta.',
+    );
+    expect(screen.getByRole('link', { name: 'Registrar Pago' })).toHaveClass('active');
+  });
+
   it('la navegación no recarga la página al elegir una vista', async () => {
     // jsdom no navega de verdad; lo que sí podemos comprobar es que el clic
     // llegó con preventDefault() aplicado. fireEvent devuelve el resultado de

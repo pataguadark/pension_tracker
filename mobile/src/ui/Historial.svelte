@@ -4,21 +4,25 @@
   Port de templates/historial.html. Todo lo que se muestra sale de EstadoApp,
   que a su vez sale del core: acá no se calcula nada.
 
-  Diferencias deliberadas con el escritorio, por alcance de esta etapa (parte
-  3 trae el camino de escritura):
-  - No están los botones de editar (✎) ni eliminar (✕) de cada fila, ni la
-    columna `.td-acciones` que los contiene (ni su <th> vacío).
+  Diferencias deliberadas con el escritorio, por alcance de esta etapa:
   - `.historial-actions` lleva solo "+ Nuevo pago": "Exportar CSV" y
     "Respaldar datos" son funciones que el móvil todavía no tiene.
+
+  La confirmación de borrado vive acá y no en TablaPagos.svelte porque acá
+  está el estado que hay que tocar. Es el equivalente del `[data-confirm]`
+  de static/app.js:331-337, que en el escritorio también se engancha desde
+  la página y no desde la fila.
 -->
 <script lang="ts">
   import type { EstadoApp } from './estado.svelte';
+  import { mensajes } from './mensajes.svelte';
   import TablaPagos from './TablaPagos.svelte';
   import TarjetasResumen from './TarjetasResumen.svelte';
 
   let {
     estado = null,
     alRegistrar = null,
+    alEditar = null,
   }: {
     /**
      * Null mientras la app todavía no abrió la base (la conexión se cablea
@@ -27,6 +31,8 @@
      */
     estado?: EstadoApp | null;
     alRegistrar?: (() => void) | null;
+    /** Abre la pantalla de edición del pago cuyo id se pasa. */
+    alEditar?: ((id: number) => void) | null;
   } = $props();
 
   const filas = $derived(estado?.filas ?? []);
@@ -62,6 +68,24 @@
 
   function registrar(): void {
     alRegistrar?.();
+  }
+
+  /**
+   * Port de `eliminar_pago` más la confirmación que el escritorio hace en
+   * el navegador. El texto del `confirm` es literal del `data-confirm` de
+   * historial.html:203; el de los avisos, literal de los dos flash de
+   * routes/pagos.py:307-309.
+   */
+  async function eliminar(id: number): Promise<void> {
+    if (!window.confirm(`¿Eliminar pago #${id}? Esta acción no se puede deshacer.`)) {
+      return;
+    }
+    if (!estado) return;
+    if (await estado.eliminarPago(id)) {
+      mensajes.agregar(`Pago #${id} eliminado correctamente.`, 'exito');
+    } else {
+      mensajes.agregar(`No se encontró el pago #${id}.`, 'error');
+    }
   }
 </script>
 
@@ -102,7 +126,10 @@
   {/if}
 
   {#if filas.length > 0}
-    <TablaPagos {filas} />
+    <TablaPagos
+      {filas}
+      alEditar={(id) => alEditar?.(id)}
+      alEliminar={(id) => { void eliminar(id); }} />
 
     <div class="historial-actions">
       <a

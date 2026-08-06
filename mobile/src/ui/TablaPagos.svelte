@@ -16,7 +16,16 @@
   import { fmtFactor, formatearPesos } from '../core/formatters';
   import { claseSigno, etiquetaPeriodo, montoConSigno } from './formato';
 
-  let { filas }: { filas: FilaHistorial[] } = $props();
+  let {
+    filas,
+    alEditar = null,
+    alEliminar = null,
+  }: {
+    filas: FilaHistorial[];
+    /** Recibe el id de la BD del pago, no el número que se ve en la columna. */
+    alEditar?: ((id: number) => void) | null;
+    alEliminar?: ((id: number) => void) | null;
+  } = $props();
 
   /**
    * El conteo se hace sobre las filas que se están mostrando (las del año
@@ -41,6 +50,8 @@
         <th>Pagado</th>
         <th>Diferencia mes</th>
         <th>Saldo corrido</th>
+        <!-- Vacío, sobre la columna de acciones: igual que historial.html:104. -->
+        <th></th>
       </tr>
     </thead>
     <tbody>
@@ -82,6 +93,34 @@
             {#if fila.desbalanceUtmCorridoPesos !== null}
               <span class="valor-utm {claseSigno(fila.desbalanceUtmCorridoPesos)}"
                 >{montoConSigno(fila.desbalanceUtmCorridoPesos)}</span>
+            {/if}
+          </td>
+          <!--
+            Acciones de la fila (historial.html:199-206). Sin data-label a
+            propósito: el escritorio tampoco se lo pone, y bajo 768px el CSS
+            alinea esta celda a la derecha con `.td-acciones` y le da 44px de
+            lado a cada botón.
+
+            El escritorio envía el borrado con un <form> POST y confirma en
+            `[data-confirm]`; acá no hay servidor, así que el botón llama
+            directo y la confirmación la pide Historial.svelte, que es quien
+            tiene el estado. La clase `.btn-eliminar` se conserva porque es
+            la que lleva la regla de los 44px.
+          -->
+          <td class="td-acciones">
+            {#if fila.id != null}
+              <a
+                href="#editar-{fila.id}"
+                class="btn-editar"
+                title="Editar pago"
+                aria-label="Editar pago #{fila.id}"
+                onclick={(e) => { e.preventDefault(); alEditar?.(fila.id as number); }}>✎</a>
+              <button
+                type="button"
+                class="btn-eliminar"
+                title="Eliminar pago"
+                aria-label="Eliminar pago #{fila.id}"
+                onclick={() => alEliminar?.(fila.id as number)}>✕</button>
             {/if}
           </td>
         </tr>

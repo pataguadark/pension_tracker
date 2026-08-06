@@ -1,6 +1,25 @@
 import { describe, expect, it } from 'vitest';
 
-import { claseEstadoCard, claseSigno, etiquetaPeriodo, montoConSigno } from './formato';
+import {
+  claseEstadoCard, claseSigno, descripcionDesbalanceMes, etiquetaPeriodo, montoConSigno,
+} from './formato';
+
+describe('descripcionDesbalanceMes', () => {
+  // Es el texto que el escritorio pega al flash de éxito tras registrar
+  // ("✅ Pago registrado correctamente. {descripcion_mes}"), y lo escribe
+  // calcular_desbalance_mensual, no la plantilla.
+  it('con excedente dice cuánto se pagó de más', () => {
+    expect(descripcionDesbalanceMes(20_000)).toBe('Pagó $20.000 de más este mes.');
+  });
+
+  it('con deuda dice cuánto se pagó de menos, sin signo negativo en la cifra', () => {
+    expect(descripcionDesbalanceMes(-80_000)).toBe('Pagó $80.000 de menos este mes.');
+  });
+
+  it('con pago exacto no menciona ninguna cifra', () => {
+    expect(descripcionDesbalanceMes(0)).toBe('Pago exacto. Sin diferencia.');
+  });
+});
 
 describe('montoConSigno', () => {
   // El escritorio arma el signo FUERA del "$": la plantilla escribe

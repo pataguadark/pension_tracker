@@ -28,9 +28,18 @@
     registro_pago.html línea 168 vs "Guardar cambios →" en editar_pago.html
     línea 135): mismo mecanismo, prop con default de registro.
   - editar_pago.html envuelve el botón en `.edit-actions` junto a un enlace
-    "← Cancelar" que aquí no se reproduce: ese enlace no necesita estar
-    dentro de un <form> (no dispara envío), así que queda a criterio de
-    quien arme la pantalla de edición colocarlo alrededor de este componente.
+    "← Cancelar" (líneas 130-137). Ese enlace lo aporta la pantalla de
+    edición como snippet `acciones`, y al recibirlo este componente
+    envuelve el snippet y su propio botón en `.edit-actions`, con el botón
+    marcado además como `.btn-submit-edit`.
+
+    No basta con que la pantalla ponga el enlace ALREDEDOR de este
+    componente, como decía la versión anterior de este comentario: el
+    botón de envío tiene que estar dentro del <form> para enviarlo, y
+    `.edit-actions` tiene que contener a los dos. Bajo 768px el CSS le
+    aplica `flex-direction: column-reverse` (estilo.css:1413-1424), así
+    que si los botones no son hermanos dentro de ese contenedor quedan uno
+    debajo del otro en el orden equivocado y sin los 44px de alto mínimo.
 
   Los errores de validación se encolan en `mensajes` (mensajes.svelte.ts),
   el equivalente del flash de sesión de Flask: el escritorio no tiene
@@ -38,6 +47,7 @@
   existe en el móvil.
 -->
 <script lang="ts">
+  import type { Snippet } from 'svelte';
 
   import {
     calcularPreview,
@@ -62,6 +72,7 @@
     pistaUtm = 'Pre-cargado desde la BD',
     pistaMonto = 'Lo que se transfirió este mes',
     textoBoton = 'Registrar Pago →',
+    acciones = undefined,
   }: {
     /** Los seis campos en crudo, tal como se ven en los inputs. */
     campos: CamposFormulario;
@@ -71,6 +82,11 @@
     pistaUtm?: string;
     pistaMonto?: string;
     textoBoton?: string;
+    /**
+     * Botones extra que van junto al de envío (hoy: el "← Cancelar" de
+     * edición). Al pasarlo, los dos quedan dentro de `.edit-actions`.
+     */
+    acciones?: Snippet;
   } = $props();
 
   const preview = $derived(calcularPreview({
@@ -230,6 +246,19 @@
     <div class="preview-estado {claseEstado}">{textoEstado}</div>
   </div>
 
-  <button type="submit" class="btn-submit">{textoBoton}</button>
+  {#if acciones}
+    <!--
+      Marcado de editar_pago.html:130-137: el enlace de cancelar PRIMERO y el
+      botón de enviar después, los dos hermanos dentro de `.edit-actions`.
+      Ese orden es el que la regla `column-reverse` de bajo 768px invierte
+      para dejar "Guardar cambios" arriba en el teléfono.
+    -->
+    <div class="edit-actions">
+      {@render acciones()}
+      <button type="submit" class="btn-submit btn-submit-edit">{textoBoton}</button>
+    </div>
+  {:else}
+    <button type="submit" class="btn-submit">{textoBoton}</button>
+  {/if}
 
 </form>
