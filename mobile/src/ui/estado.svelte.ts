@@ -39,7 +39,6 @@ export const CLAVE_FACTOR_UTM_PREDETERMINADO = 'factor_utm_predeterminado';
 
 /** Lo que devuelve `registrarPago`, para que la pantalla arme su mensaje. */
 export interface ResultadoRegistro {
-  pagoId: number;
   desbalance: number;
 }
 
@@ -154,7 +153,7 @@ export class EstadoApp {
     const cuotaPactada = calcularCuotaPactada(valores.utmFactor, valores.utmValor);
     const { diferencia } = calcularDesbalanceMensual(valores.montoPagado, cuotaPactada);
 
-    const pagoId = await this.pagos.insertarPago({
+    await this.pagos.insertarPago({
       fecha: valores.fecha,
       mesPago: valores.mesPago,
       anioPago: valores.anioPago,
@@ -170,7 +169,7 @@ export class EstadoApp {
     await this.repoUtm.guardarUtm(valores.anioPago, valores.mesPago, valores.utmValor);
 
     await this.cargar();
-    return { pagoId, desbalance: diferencia };
+    return { desbalance: diferencia };
   }
 
   /**

@@ -243,11 +243,10 @@ describe('EstadoApp — registrar un pago', () => {
     const { estado } = await montar();
     await estado.cargar();
 
-    const { pagoId } = await estado.registrarPago(valoresDe());
+    await estado.registrarPago(valoresDe());
 
-    expect(pagoId).toBeGreaterThan(0);
     expect(estado.filas).toHaveLength(1);
-    expect(estado.filas[0]!.id).toBe(pagoId);
+    expect(estado.filas[0]!.id).toBeGreaterThan(0);
     expect(estado.filas[0]!.cuotaPactada).toBe(180_000);
     expect(estado.filas[0]!.montoPagado).toBe(200_000);
     expect(estado.filas[0]!.utmFactor).toBe(3);
