@@ -9,8 +9,13 @@
   El marcado se copia de la plantilla, no se reinventa: dos mitades
   `.utm-banner-left` / `.utm-banner-right` dentro de un `.utm-banner` que es
   flex con space-between, y un botón con la clase `.utm-refresh` cuyo icono
-  va en su propio `<span class="utm-refresh-icon">`. Las tres piezas las
-  exige el CSS y dos de ellas solo se notan en un teléfono:
+  va en su propio `<span class="utm-refresh-icon">`.
+
+  De esas piezas, el CSS solo tiene regla propia para `.utm-banner-right`,
+  `.utm-refresh` y `.utm-refresh-icon`; `.utm-banner-left` no la tiene —el
+  `<div>` sí hace falta, porque sin él los cuatro elementos se reparten
+  sueltos en el space-between, pero el nombre es solo fidelidad con la
+  plantilla—. Dos de ellas solo se notan en un teléfono:
   `@media (max-width: 768px)` sube el botón a 44px táctiles por su clase
   (estilo.css:1382-1385), y la animación de carga gira el span interior
   (estilo.css:531-533). jsdom mide 1024px y no aplica ninguna @media, así
@@ -97,7 +102,10 @@
       base_de_datos: '● Usando UTM guardada (no es del mes actual)',
       no_disponible: '● UTM no disponible',
       refresco_sin_dato: '● No se pudo obtener la UTM',
-      refresco_caido: '● Error de conexión',
+      // Esta rama NO es un fallo de red: el servicio de UTM nunca lanza.
+      // Solo la alcanza un fallo al ESCRIBIR en la base, así que decir
+      // "error de conexión" mandaría al usuario a revisar su señal.
+      refresco_caido: '● No se pudo guardar la UTM',
     }[fuente],
   );
 

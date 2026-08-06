@@ -274,3 +274,85 @@ describe('BannerUtm — el marcado que exige el CSS', () => {
     expect(der.querySelector('.utm-refresh')).not.toBeNull();
   });
 });
+
+describe('BannerUtm — el estado "refrescando"', () => {
+  /** Cliente que no resuelve hasta que la prueba lo permita. */
+  class HttpQueSeCuelga {
+    llamadas = 0;
+    private liberar!: (v: unknown) => void;
+    readonly enVuelo = new Promise((r) => { this.liberar = r; });
+    async obtenerJson(): Promise<unknown> {
+      this.llamadas++;
+      await this.enVuelo;
+      throw new Error('sin red');
+    }
+    soltar(): void { this.liberar(null); }
+  }
+
+  async function montarColgado() {
+    const http = new HttpQueSeCuelga();
+    const { estado } = await montarEstado({ utmVieja: 66_000, http });
+    const { container } = render(BannerUtm, { estado });
+    return { http, container };
+  }
+
+  it('mientras refresca marca el botón como cargando', async () => {
+    // La clase `loading` es la mitad del mecanismo que hace girar el icono
+    // (estilo.css:531-533 anima `.utm-refresh.loading .utm-refresh-icon`).
+    // Sin ella el span existe pero nunca gira, y jsdom no aplica la
+    // animación, así que solo se puede fijar la clase.
+    const { http } = await montarColgado();
+    expect(boton()).not.toHaveClass('loading');
+
+    await userEvent.click(boton());
+    await waitFor(() => expect(boton()).toHaveClass('loading'));
+
+    http.soltar();
+    await waitFor(() => expect(boton()).not.toHaveClass('loading'));
+  });
+
+  it('deshabilita el botón mientras hay un refresco en vuelo', async () => {
+    const { http } = await montarColgado();
+    await userEvent.click(boton());
+    await waitFor(() => expect(boton()).toBeDisabled());
+
+    http.soltar();
+    await waitFor(() => expect(boton()).toBeEnabled());
+  });
+
+  it('un doble toque no dispara dos consultas', async () => {
+    // Realista en un teléfono. Sin el guard de reentrada serían dos
+    // peticiones y dos escrituras concurrentes sobre la misma fila.
+    const { http } = await montarColgado();
+    await userEvent.click(boton());
+    await waitFor(() => expect(http.llamadas).toBe(1));
+
+    // El segundo toque llega con el primero aún en vuelo.
+    boton().dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await Promise.resolve();
+    expect(http.llamadas).toBe(1);
+
+    http.soltar();
+  });
+});
+
+describe('BannerUtm — fallo al guardar', () => {
+  it('avisa sin culpar a la red cuando falla la escritura en la base', async () => {
+    // `refrescarUtm` solo puede lanzar si falla la ESCRITURA: el servicio de
+    // UTM nunca lanza. Sin cubrir esta rama, la excepción escapaba del
+    // componente y el banner quedaba en su estado anterior sin decir nada.
+    const { estado } = await montarEstado({
+      utmVieja: 66_000, http: new HttpConValor(70_123),
+    });
+    estado.refrescarUtm = async () => { throw new Error('disco lleno'); };
+
+    const { container } = render(BannerUtm, { estado });
+    await userEvent.click(boton());
+
+    await waitFor(() => {
+      expect(fuente(container).textContent).toContain('No se pudo guardar la UTM');
+    });
+    // Y no pierde el valor que ya mostraba.
+    expect(valor(container).textContent).toContain('66.000');
+  });
+});
