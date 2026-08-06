@@ -21,14 +21,19 @@
   let {
     vistaInicial = 'historial' as Vista,
     estado = null,
+    errorArranque = null,
   }: {
     vistaInicial?: Vista;
     /**
-     * Lo inyecta quien abre la base de datos (main.ts, en la etapa que
-     * cablea el almacenamiento). Mientras sea null el historial se ve como
-     * uno sin pagos, que es lo que efectivamente hay.
+     * Lo inyecta quien abre la base de datos (main.ts). Mientras sea null el
+     * historial se ve como uno sin pagos, que es lo que efectivamente hay.
      */
     estado?: EstadoApp | null;
+    /**
+     * Fallo al ABRIR la base: acá no hay EstadoApp que construir, así que el
+     * error no puede viajar en `estado.error`. Lo pasa main.ts.
+     */
+    errorArranque?: string | null;
   } = $props();
   let vista = $state<Vista>(vistaInicial);
   /** Pago que está abierto en la pantalla de edición. */
@@ -52,6 +57,24 @@
     pagoEnEdicion = null;
     vista = 'historial';
   }
+
+  /**
+   * El fallo que hay que gritar: o no se pudo abrir la base, o no se
+   * pudieron leer los pagos.
+   *
+   * Sin esto `estado.error` no se pintaba en ninguna parte y un fallo de
+   * carga dejaba en pantalla el estado vacío del historial —"Sin pagos
+   * registrados"—, que en una app de pensión de alimentos es el peor
+   * mensaje posible: parece que se perdieron los datos. El error tapa TODAS
+   * las vistas a propósito: si no se pudo leer la base, dejar el formulario
+   * de registro accesible invitaría a teclear un pago que tampoco se va a
+   * poder guardar.
+   */
+  const mensajeDeError = $derived(errorArranque ?? estado?.error ?? null);
+
+  function reintentar(): void {
+    void estado?.cargar();
+  }
 </script>
 
 <div class="bg-grid"></div>
@@ -62,7 +85,27 @@
 <Mensajes />
 
 <main class="main-content">
-  {#if vista === 'historial'}
+  {#if mensajeDeError !== null}
+    <div class="flash-container">
+      <div class="flash flash-error" role="alert">
+        <span class="flash-icon">✕</span>
+        No se pudieron cargar tus pagos: {mensajeDeError}
+      </div>
+    </div>
+    <div class="empty-state">
+      <div class="empty-icon">⚠</div>
+      <p class="empty-title">Error al leer la base de datos</p>
+      <p class="empty-sub">
+        Tus pagos <strong>no</strong> se han perdido: esto es un problema al
+        leerlos, no un historial vacío. Cierra la aplicación y vuelve a abrirla.
+      </p>
+      {#if estado}
+        <!-- `.btn-nuevo` es la clase que el escritorio usa para el botón del
+             estado vacío (estilo.css:1068); no se inventa una nueva. -->
+        <button type="button" class="btn-nuevo" onclick={reintentar}>Reintentar</button>
+      {/if}
+    </div>
+  {:else if vista === 'historial'}
     <Historial {estado} alRegistrar={() => cambiar('registro')} alEditar={editar} />
   {:else if vista === 'edicion' && pagoEnEdicion !== null}
     <!--

@@ -39,7 +39,22 @@ export const CABECERAS: Record<string, string> = {
 export class ClienteHttpFetch implements ClienteHttp {
   constructor(
     private readonly timeoutMs: number = TIMEOUT_MS,
-    private readonly fetchImpl: typeof fetch = fetch,
+    /**
+     * El envoltorio no es adorno; resuelve dos cosas a la vez.
+     *
+     * 1. `fetch` del navegador es una operación WebIDL de `Window`: llamarla
+     *    con un `this` que no sea el objeto global aborta con "Failed to
+     *    execute 'fetch' on 'Window': Illegal invocation". Guardar la función
+     *    pelada en un campo y llamarla como `this.fetchImpl(...)` hace
+     *    exactamente eso. Ni Node ni jsdom comprueban el receptor, así que
+     *    el fallo solo aparecería en un navegador de verdad.
+     * 2. Al leer `fetch` en cada llamada, y no una sola vez al construir, se
+     *    usa el que haya vigente en ese momento: CapacitorHttp parchea
+     *    `window.fetch` para que salga por la capa nativa, y capturarlo
+     *    antes de ese parcheo dejaría al cliente hablando por el fetch del
+     *    WebView, que muere por CORS.
+     */
+    private readonly fetchImpl: typeof fetch = (entrada, init) => fetch(entrada, init),
   ) {}
 
   async obtenerJson(url: string): Promise<unknown> {

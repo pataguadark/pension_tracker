@@ -120,3 +120,36 @@ describe('ClienteHttpFetch', () => {
     });
   });
 });
+
+describe('ClienteHttpFetch — el fetch por defecto', () => {
+  // Todas las pruebas de arriba inyectan un fetch, así que el valor POR
+  // DEFECTO del constructor -el único que se usa en el teléfono- no estaba
+  // cubierto por ninguna.
+  //
+  // Importa porque `fetch` del navegador es una operación WebIDL de Window:
+  // invocarla con un `this` que no sea el objeto global aborta con
+  // "Failed to execute 'fetch' on 'Window': Illegal invocation". Guardarla
+  // en un campo y llamarla como `this.fetchImpl(...)` hace exactamente eso.
+  //
+  // Hoy en el teléfono no se nota porque CapacitorHttp reemplaza
+  // `window.fetch` por una función suelta, a la que el `this` le da igual.
+  // Pero con `npm run dev` en un navegador -sin puente nativo que parchee
+  // nada- el ↻ del banner moriría ahí. Ni Node ni jsdom hacen esa
+  // comprobación, así que la prueba mira el `this` con el que se invoca.
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  it('no invoca el fetch global ligado al cliente', async () => {
+    let receptor: unknown = 'no-llamado';
+    vi.stubGlobal('fetch', function (this: unknown) {
+      receptor = this;
+      return Promise.resolve(
+        new Response('{"ok":true}', { headers: { 'content-type': 'application/json' } }),
+      );
+    });
+
+    const cliente = new ClienteHttpFetch();
+    expect(await cliente.obtenerJson('https://ejemplo.cl/api')).toEqual({ ok: true });
+    expect(receptor).not.toBe(cliente);
+    expect(receptor).not.toBeInstanceOf(ClienteHttpFetch);
+  });
+});

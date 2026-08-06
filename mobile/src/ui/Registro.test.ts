@@ -217,3 +217,102 @@ describe('Registro — guardar', () => {
     expect(textos()).toContain('Error al procesar el pago: base llena');
   });
 });
+
+describe('Registro — el banner de UTM', () => {
+  // El banner encabeza registro_pago.html (líneas 13-42), antes del
+  // formulario. Que exista y esté conectado al estado es lo que se prueba
+  // acá; sus estados visuales están en BannerUtm.test.ts.
+
+  const hoy = new Date();
+  const anioActual = hoy.getFullYear();
+  const mesActual = hoy.getMonth() + 1;
+
+  /** Cliente que publica un valor para el mes en curso. */
+  class HttpDelMesActual {
+    constructor(private readonly valor: number) {}
+    async obtenerJson(): Promise<unknown> {
+      return {
+        serie: [{
+          fecha: `${anioActual}-${String(mesActual).padStart(2, '0')}-01T04:00:00.000Z`,
+          valor: this.valor,
+        }],
+      };
+    }
+  }
+
+  async function montarConBanner(http: { obtenerJson(url: string): Promise<unknown> }) {
+    const ejecutor = new EjecutorNode(':memory:');
+    await inicializarBd(ejecutor);
+    const repoPagos = new RepositorioPagos(ejecutor);
+    const repoUtm = new RepositorioUtm(ejecutor);
+    const config = new RepositorioConfiguracion(ejecutor);
+    await repoUtm.guardarUtm(anioActual - 1, 6, 65_000);
+    const estado = new EstadoApp(
+      repoPagos, new ServicioUtm(http, repoUtm), repoUtm, config,
+    );
+    await estado.cargar();
+    return { estado, repoUtm, repoPagos };
+  }
+
+  it('va antes del formulario, como en la plantilla del escritorio', async () => {
+    const { estado } = await montarEstado({ utmGuardada: 69_889 });
+    const { container } = render(Registro, { estado, alVolver: () => {} });
+
+    const banner = container.querySelector('.utm-banner');
+    const form = container.querySelector('form');
+    expect(banner).not.toBeNull();
+    expect(form).not.toBeNull();
+    // compareDocumentPosition: 4 = "el argumento viene DESPUÉS" en el DOM.
+    expect(banner!.compareDocumentPosition(form!) & 4).toBeTruthy();
+  });
+
+  it('refrescar la UTM también actualiza el campo Valor UTM del formulario', async () => {
+    // static/app.js:113-115 escribe el input `utm_valor` en el mismo
+    // manejador que actualiza el banner. Si el campo se quedara con el valor
+    // viejo, el pago se registraría con una UTM distinta de la que el banner
+    // muestra justo encima.
+    const { estado } = await montarConBanner(new HttpDelMesActual(70_123));
+    render(Registro, { estado, alVolver: () => {} });
+
+    expect(campo(/^Valor UTM/).value).toBe('65.000');
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Actualizar UTM' }));
+    await dejarCorrer();
+    await dejarCorrer();
+
+    expect(campo(/^Valor UTM/).value).toBe('70.123');
+  });
+
+  it('el pago que se guarda tras refrescar usa la UTM nueva', async () => {
+    // La consecuencia real del punto anterior: la cuota pactada sale de la
+    // UTM del campo, así que un campo desactualizado produce un desbalance
+    // equivocado guardado en la base.
+    const { estado, repoPagos } = await montarConBanner(new HttpDelMesActual(70_123));
+    const { container } = render(Registro, { estado, alVolver: () => {} });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Actualizar UTM' }));
+    await dejarCorrer();
+    await dejarCorrer();
+
+    await fireEvent.input(campo(/Factor UTM pactado/), { target: { value: '3' } });
+    await fireEvent.input(campo(/Monto efectivamente pagado/), { target: { value: '250000' } });
+    await fireEvent.submit(container.querySelector('form')!);
+    await dejarCorrer();
+
+    const guardados = await repoPagos.obtenerTodosLosPagos();
+    expect(guardados).toHaveLength(1);
+    expect(guardados[0]!.utmValor).toBe(70_123);
+    expect(guardados[0]!.cuotaPactada).toBe(210_369);
+  });
+
+  it('un refresco fallido deja el campo Valor UTM como estaba', async () => {
+    const { estado } = await montarConBanner(new HttpSinRed());
+    render(Registro, { estado, alVolver: () => {} });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Actualizar UTM' }));
+    await dejarCorrer();
+    await dejarCorrer();
+
+    expect(campo(/^Valor UTM/).value).toBe('65.000');
+  });
+});

@@ -389,3 +389,136 @@ describe('EstadoApp — leer un pago suelto', () => {
     expect(await estado.obtenerPago(999)).toBeNull();
   });
 });
+
+describe('EstadoApp — si la UTM de referencia es la del mes en curso', () => {
+  // `cargar` ya guardaba el VALOR de la UTM de referencia pero tiraba el
+  // `esActual` que `obtenerUtmReferencia` devuelve junto a él. El banner de
+  // registro necesita justamente ese dato para distinguir "verificada" (la
+  // del mes en curso) de "usando UTM guardada" (la de otro mes), que es la
+  // distinción que hace `registro()` en routes/pagos.py:105-111.
+
+  const hoy = new Date();
+  const anioActual = hoy.getFullYear();
+  const mesActual = hoy.getMonth() + 1;
+
+  it('con la UTM del mes en curso guardada, esActual es true', async () => {
+    const { estado, repoUtm } = await montar();
+    await repoUtm.guardarUtm(anioActual, mesActual, 69_889);
+    await estado.cargar();
+
+    expect(estado.utmReferencia).toBe(69_889);
+    expect(estado.utmReferenciaEsActual).toBe(true);
+  });
+
+  it('con una UTM de otro mes, esActual es false', async () => {
+    const { estado, repoUtm } = await montar();
+    await repoUtm.guardarUtm(anioActual - 1, 6, 65_000);
+    await estado.cargar();
+
+    expect(estado.utmReferencia).toBe(65_000);
+    expect(estado.utmReferenciaEsActual).toBe(false);
+  });
+
+  it('sin ninguna UTM guardada, esActual es false', async () => {
+    const { estado } = await montar();
+    await estado.cargar();
+
+    expect(estado.utmReferencia).toBeNull();
+    expect(estado.utmReferenciaEsActual).toBe(false);
+  });
+});
+
+describe('EstadoApp — refrescarUtm (port de POST /utm/refrescar)', () => {
+  const hoy = new Date();
+  const anioActual = hoy.getFullYear();
+  const mesActual = hoy.getMonth() + 1;
+
+  /** Cliente que publica un valor para el mes en curso. */
+  class HttpDelMesActual {
+    llamadas = 0;
+    constructor(private readonly valor: number) {}
+    async obtenerJson(): Promise<unknown> {
+      this.llamadas++;
+      return {
+        serie: [{
+          fecha: `${anioActual}-${String(mesActual).padStart(2, '0')}-01T04:00:00.000Z`,
+          valor: this.valor,
+        }],
+      };
+    }
+  }
+
+  async function montarCon(http: { obtenerJson(): Promise<unknown> }) {
+    const ejecutor = new EjecutorNode(':memory:');
+    await inicializarBd(ejecutor);
+    const pagos = new RepositorioPagos(ejecutor);
+    const repoUtm = new RepositorioUtm(ejecutor);
+    const config = new RepositorioConfiguracion(ejecutor);
+    const estado = new EstadoApp(pagos, new ServicioUtm(http, repoUtm), repoUtm, config);
+    return { estado, repoUtm, pagos };
+  }
+
+  it('con red devuelve ok, guarda la UTM y la deja como referencia actual', async () => {
+    const { estado, repoUtm } = await montarCon(new HttpDelMesActual(70_123));
+    await repoUtm.guardarUtm(anioActual - 1, 6, 65_000);
+    await estado.cargar();
+    expect(estado.utmReferenciaEsActual).toBe(false);
+
+    const r = await estado.refrescarUtm();
+
+    expect(r).toEqual({ ok: true, utm: 70_123 });
+    expect(estado.utmReferencia).toBe(70_123);
+    expect(estado.utmReferenciaEsActual).toBe(true);
+    // routes/utm.py:41-42: persiste solo cuando la fuente es mindicador.
+    expect(await repoUtm.obtenerUtmGuardada(anioActual, mesActual))
+      .toMatchObject({ utmValor: 70_123 });
+  });
+
+  it('sin red devuelve ok:false y NO pisa la referencia ni la base', async () => {
+    const caido = { async obtenerJson(): Promise<unknown> { throw new Error('sin red'); } };
+    const { estado, repoUtm } = await montarCon(caido);
+    await repoUtm.guardarUtm(anioActual - 1, 6, 65_000);
+    await estado.cargar();
+
+    const r = await estado.refrescarUtm();
+
+    expect(r.ok).toBe(false);
+    // El respaldo de `obtenerUtm` devuelve la última guardada, pero la
+    // fuente es 'base_de_datos': no es un refresco exitoso.
+    expect(estado.utmReferencia).toBe(65_000);
+    expect(estado.utmReferenciaEsActual).toBe(false);
+    expect(await repoUtm.obtenerUtmGuardada(anioActual, mesActual)).toBeNull();
+  });
+
+  it('un refresco exitoso recalcula el historial con la UTM nueva', async () => {
+    // Las filas y el desbalance ajustado se derivan de `utmReferencia`
+    // (recalcular()). Cambiar el valor sin recalcular dejaría el banner
+    // diciendo una cosa y la tabla otra, con la MISMA base.
+    const { estado, repoUtm, pagos } = await montarCon(new HttpDelMesActual(70_123));
+    await repoUtm.guardarUtm(anioActual - 1, 6, 65_000);
+    await pagos.insertarPago(pagoDe(anioActual, mesActual, 100_000));
+    await estado.cargar();
+    const antes = estado.resumenUtm?.desbalanceAjustado;
+
+    await estado.refrescarUtm();
+
+    expect(estado.filas).toHaveLength(1);
+    expect(estado.resumenUtm?.desbalanceAjustado).not.toBe(antes);
+  });
+
+  it('un refresco exitoso conserva el filtro por año', async () => {
+    // `cargar()` suelta el filtro (equivale al redirect del escritorio);
+    // refrescar la UTM no es una navegación y no debe soltarlo.
+    const { estado, repoUtm, pagos } = await montarCon(new HttpDelMesActual(70_123));
+    await repoUtm.guardarUtm(anioActual - 1, 6, 65_000);
+    await pagos.insertarPago(pagoDe(anioActual, mesActual, 100_000));
+    await pagos.insertarPago(pagoDe(anioActual - 1, 1, 100_000));
+    await estado.cargar();
+    await estado.filtrarPorAnio(anioActual);
+
+    await estado.refrescarUtm();
+
+    expect(estado.anioFiltro).toBe(anioActual);
+    expect(estado.filas).toHaveLength(1);
+  });
+});

@@ -63,6 +63,15 @@ export class EstadoApp {
   anioFiltro = $state<number | null>(null);
   utmReferencia = $state<number | null>(null);
   /**
+   * Si `utmReferencia` es la del mes en curso o la de un mes anterior.
+   *
+   * Es el `es_actual` que `obtener_utm_referencia` devuelve junto al valor y
+   * que `registro()` traduce a `base_de_datos_actual` / `base_de_datos`
+   * (routes/pagos.py:105-111): el banner de registro lo necesita para
+   * distinguir "verificada" de "usando UTM guardada".
+   */
+  utmReferenciaEsActual = $state(false);
+  /**
    * Factor con el que arranca el formulario de registro: el guardado como
    * predeterminado si lo hay, y si no el del último pago. Port de la
    * precarga de `registro()` (routes/pagos.py:113-119).
@@ -111,6 +120,7 @@ export class EstadoApp {
       const hoy = new Date();
       const ref = await this.utm.obtenerUtmReferencia(hoy.getFullYear(), hoy.getMonth() + 1);
       this.utmReferencia = ref.utmValor;
+      this.utmReferenciaEsActual = ref.esActual;
 
       this.factorPrecargado = await this.calcularFactorPrecargado();
 
@@ -133,6 +143,43 @@ export class EstadoApp {
     const pagosDelFiltro =
       anio === null ? this.todosLosPagos : this.todosLosPagos.filter((p) => p.anioPago === anio);
     this.recalcular(pagosDelFiltro);
+  }
+
+  /**
+   * Trae la UTM del mes en curso desde mindicador.cl y, si la consigue, la
+   * guarda y la deja como referencia. Port de `POST /utm/refrescar`
+   * (routes/utm.py:27-52), que es lo que dispara el ↻ del banner.
+   *
+   * `ok` es el mismo del escritorio: solo cuenta como refresco un valor que
+   * vino de mindicador.cl. `obtenerUtm` cae a la última UTM guardada cuando
+   * no hay red, y esa NO se persiste ni se promueve a "actual": sería
+   * declarar verificado un dato viejo.
+   *
+   * Nunca borra lo que ya había. Un fallo de red deja el valor anterior
+   * intacto, en pantalla y en la base: perder el dato por quedarse sin señal
+   * sería peor que no refrescar.
+   */
+  async refrescarUtm(): Promise<{ ok: boolean; utm: number | null }> {
+    const hoy = new Date();
+    const r = await this.utm.obtenerUtm(hoy.getFullYear(), hoy.getMonth() + 1);
+
+    // `Number.isFinite` además de lo que pide el escritorio: un valor
+    // extremo de la API entraría al cálculo de la cuota, que lo rechaza.
+    // Mismo criterio defensivo que `obtenerUtmReferencia`.
+    const ok = r.utm !== null && Number.isFinite(r.utm) && r.fuente === 'mindicador';
+    if (!ok) {
+      return { ok: false, utm: r.utm };
+    }
+
+    await this.repoUtm.guardarUtm(r.anio, r.mes, r.utm!);
+    this.utmReferencia = r.utm;
+    this.utmReferenciaEsActual = true;
+    // Filas y resúmenes se derivan de `utmReferencia`: sin recalcular, el
+    // banner mostraría la UTM nueva y la tabla seguiría con la vieja.
+    // `filtrarPorAnio(this.anioFiltro)` en vez de `cargar()` porque
+    // refrescar no es una navegación y no debe soltar el filtro.
+    await this.filtrarPorAnio(this.anioFiltro);
+    return { ok: true, utm: r.utm };
   }
 
   /** Un pago por su id, o null. Lo usa la pantalla de edición al abrirse. */

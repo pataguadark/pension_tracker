@@ -8,17 +8,20 @@
   Los seis campos y el preview vienen enteros de FormularioPago.svelte; acá
   van solo el encabezado, la precarga y qué hacer con los valores validados.
 
-  Diferencia deliberada con el escritorio: NO se porta el banner de UTM
-  (registro_pago.html:13-42) ni sus dos botones de acción —el ★ de "guardar
-  factor predeterminado" (líneas 64-70) y el 🔗 de "vincular UTM al mes"
-  (líneas 88-95)—. Los tres dependen de rutas que salen a la red
-  (`utm.utm_refrescar`, `utm.utm_historico`) o de escribir en
-  `configuracion`, y ninguna de esas piezas está portada todavía. El factor
-  predeterminado SÍ se lee: si el escritorio lo dejó guardado en la base
-  compartida, el teléfono lo respeta aunque todavía no pueda escribirlo.
+  El banner de UTM (registro_pago.html:13-42) sí va, en BannerUtm.svelte,
+  con su ↻ contra mindicador.cl.
+
+  Diferencia deliberada que QUEDA con el escritorio: no se portan los otros
+  dos botones de acción del formulario —el ★ de "guardar factor
+  predeterminado" (líneas 64-70) y el 🔗 de "vincular UTM al mes" (líneas
+  88-95)—, que dependen de escribir en `configuracion` y de la ruta
+  `utm.utm_historico`. El factor predeterminado SÍ se lee: si el escritorio
+  lo dejó guardado en la base compartida, el teléfono lo respeta aunque
+  todavía no pueda escribirlo.
 -->
 <script lang="ts">
   import { fmtFactor } from '../core/formatters';
+  import BannerUtm from './BannerUtm.svelte';
   import type { EstadoApp } from './estado.svelte';
   import { descripcionDesbalanceMes } from './formato';
   import { formatearMiles, type CamposFormulario, type ValoresFormulario } from './formulario';
@@ -73,6 +76,22 @@
   let campos = $state<CamposFormulario>(camposIniciales());
 
   /**
+   * Refrescar la UTM desde el banner también reescribe el campo "Valor UTM",
+   * igual que static/app.js:113-115. Si el campo se quedara con el valor
+   * viejo, el banner mostraría una UTM y el pago se guardaría con otra.
+   *
+   * Se reasigna el objeto entero por gusto, no por necesidad: `campos` es
+   * `$state` sobre un objeto literal, así que Svelte 5 lo envuelve en un
+   * proxy profundo y `campos.utmValor = ...` reaccionaría igual (se
+   * comprobó mutando esta línea: la suite sigue en verde con las dos
+   * formas). La regla de "hay que reasignar" vale para objetos planos que
+   * NO pasaron por `$state`, que no es el caso acá.
+   */
+  function utmRefrescada(utm: number): void {
+    campos = { ...campos, utmValor: formatearMiles(String(Math.trunc(utm))) };
+  }
+
+  /**
    * Equivalente de `registro_post`: guarda, avisa y vuelve al historial.
    *
    * El try/except del escritorio se conserva tal cual: si el guardado
@@ -106,6 +125,8 @@
     <h1 class="page-title">Registrar Pago</h1>
     <p class="page-subtitle">Ingresa los datos del pago mensual de pensión.</p>
   </div>
+
+  <BannerUtm {estado} alActualizarValor={utmRefrescada} />
 
   <FormularioPago bind:campos alEnviar={(v) => { void guardar(v); }} />
 </div>

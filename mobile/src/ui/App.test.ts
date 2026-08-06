@@ -217,3 +217,87 @@ describe('Encabezado — menú móvil', () => {
     expect(screen.getByRole('navigation')).not.toHaveClass('open');
   });
 });
+
+describe('App — un fallo de carga no puede parecerse a "no hay datos"', () => {
+  // El peor mensaje posible en una app de pensión de alimentos es "Sin pagos
+  // registrados" cuando en realidad los pagos están y no se pudieron leer:
+  // parece que se perdieron. Hasta esta etapa `estado.error` no se pintaba
+  // en ninguna parte, así que un fallo de `cargar()` caía exactamente ahí.
+  beforeEach(() => mensajes.limpiar());
+
+  /**
+   * EstadoApp cuya carga revienta al leer los pagos. Bajar `control.falla`
+   * simula que el problema era transitorio, para probar el reintento.
+   */
+  async function estadoQueFallaAlCargar() {
+    const ejecutor = new EjecutorNode(':memory:');
+    await inicializarBd(ejecutor);
+    const repoPagos = new RepositorioPagos(ejecutor);
+    const repoUtm = new RepositorioUtm(ejecutor);
+    const config = new RepositorioConfiguracion(ejecutor);
+    const real = repoPagos.obtenerTodosLosPagos.bind(repoPagos);
+    const control = { falla: true };
+    repoPagos.obtenerTodosLosPagos = async () => {
+      if (control.falla) throw new Error('no se pudo abrir la base');
+      return real();
+    };
+    const estado = new EstadoApp(
+      repoPagos, new ServicioUtm(new HttpSinRed(), repoUtm), repoUtm, config,
+    );
+    await estado.cargar();
+    return { estado, control };
+  }
+
+  it('con estado.error, App lo muestra explícitamente', async () => {
+    const { estado } = await estadoQueFallaAlCargar();
+    expect(estado.error).not.toBeNull();
+    render(App, { estado });
+
+    expect(screen.getByRole('alert')).toHaveTextContent('no se pudo abrir la base');
+  });
+
+  it('con estado.error, App NO muestra "Sin pagos registrados"', async () => {
+    const { estado } = await estadoQueFallaAlCargar();
+    render(App, { estado });
+
+    expect(screen.queryByText('Sin pagos registrados')).not.toBeInTheDocument();
+  });
+
+  it('el aviso deja claro que los datos no se perdieron', async () => {
+    const { estado } = await estadoQueFallaAlCargar();
+    const { container } = render(App, { estado });
+
+    expect(container.textContent).toMatch(/no.*(perdido|perdieron)/i);
+  });
+
+  it('ofrece reintentar, y si la carga se recupera vuelve el historial', async () => {
+    const user = userEvent.setup();
+    const { estado, control } = await estadoQueFallaAlCargar();
+    render(App, { estado });
+
+    // La base sigue viva: el fallo era transitorio.
+    control.falla = false;
+    await user.click(screen.getByRole('button', { name: 'Reintentar' }));
+
+    expect(await screen.findByText('Sin pagos registrados')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('sin error, el historial se ve como siempre', async () => {
+    // Guarda contra el fallo simétrico: pintar el aviso de error cuando no
+    // hay ninguno dejaría la app inutilizable para todo el mundo.
+    render(App);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByText('Sin pagos registrados')).toBeInTheDocument();
+  });
+
+  it('si la base no se pudo ni abrir, App lo dice en vez de quedarse en blanco', async () => {
+    // Camino distinto de `estado.error`: acá no hay EstadoApp que construir
+    // porque `abrirBaseDeDatos` falló. Sin esto main.ts solo podría montar
+    // App sin estado, que es indistinguible de "no hay pagos".
+    render(App, { errorArranque: 'no se pudo abrir la base de datos' });
+
+    expect(screen.getByRole('alert')).toHaveTextContent('no se pudo abrir la base de datos');
+    expect(screen.queryByText('Sin pagos registrados')).not.toBeInTheDocument();
+  });
+});
