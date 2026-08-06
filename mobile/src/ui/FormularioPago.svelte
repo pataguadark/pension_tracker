@@ -15,11 +15,11 @@
   Diferencias entre registro y edición que este componente deja abiertas,
   siguiendo el marcado de las dos plantillas:
   - Los botones de "guardar factor predeterminado" (★, registro_pago.html
-    líneas 64-70) y "vincular UTM al mes" (🔗, líneas 88-95) solo existen en
-    el registro. Van en los snippets opcionales `accionFactor` y `accionUtm`:
-    cuando no se pasan, el campo queda con su `.input-wrapper` simple, igual
-    que editar_pago.html (que no tiene ni el botón ni el `.input-with-action`
-    que lo envuelve).
+    líneas 64-70) y "vincular UTM al mes" (🔗, líneas 88-95) NO se portaron:
+    son features diferidas del escritorio. Cuando se porten, cada campo
+    necesita envolverse en `.input-with-action` junto al botón, como hace
+    registro_pago.html; hoy va el `.input-wrapper` simple de
+    editar_pago.html, que es lo que ambas pantallas usan.
   - Los `form-hint` de factor, UTM y monto cambian de texto entre pantallas
     ("Cuántas UTMs equivale la pensión" vs "Guardado en el registro", etc.):
     se reciben por prop, con el texto de registro_pago.html como valor por
@@ -38,7 +38,6 @@
   existe en el móvil.
 -->
 <script lang="ts">
-  import type { Snippet } from 'svelte';
 
   import {
     calcularPreview,
@@ -58,8 +57,6 @@
 
   let {
     campos = $bindable(),
-    accionFactor,
-    accionUtm,
     alEnviar,
     pistaFactor = 'Cuántas UTMs equivale la pensión',
     pistaUtm = 'Pre-cargado desde la BD',
@@ -68,10 +65,6 @@
   }: {
     /** Los seis campos en crudo, tal como se ven en los inputs. */
     campos: CamposFormulario;
-    /** Botón "guardar factor predeterminado" (★), solo en el registro. */
-    accionFactor?: Snippet;
-    /** Botón "vincular UTM al mes" (🔗), solo en el registro. */
-    accionUtm?: Snippet;
     /** Se llama con los valores ya parseados, y solo cuando la validación pasa. */
     alEnviar: (valores: ValoresFormulario) => void;
     pistaFactor?: string;
@@ -156,24 +149,12 @@
         Factor UTM pactado
         <span class="form-hint">{pistaFactor}</span>
       </label>
-      {#if accionFactor}
-        <div class="input-with-action">
-          <div class="input-wrapper">
-            <input type="text" inputmode="decimal" id="utm_factor" name="utm_factor" class="form-input"
-              placeholder="ej: 3,0561" required
-              value={campos.factor} oninput={alTeclearFactor} />
-            <span class="input-suffix">UTM</span>
-          </div>
-          {@render accionFactor()}
-        </div>
-      {:else}
-        <div class="input-wrapper">
+      <div class="input-wrapper">
           <input type="text" inputmode="decimal" id="utm_factor" name="utm_factor" class="form-input"
             placeholder="ej: 3,0561" required
             value={campos.factor} oninput={alTeclearFactor} />
           <span class="input-suffix">UTM</span>
         </div>
-      {/if}
     </div>
 
     <!-- Valor UTM (pre-cargado, editable) -->
@@ -182,24 +163,12 @@
         Valor UTM
         <span class="form-hint">{pistaUtm}</span>
       </label>
-      {#if accionUtm}
-        <div class="input-with-action">
-          <div class="input-wrapper">
-            <input type="text" inputmode="numeric" id="utm_valor" name="utm_valor" class="form-input"
-              placeholder="ej: 69.889" required
-              value={campos.utmValor} oninput={alTeclearUtm} />
-            <span class="input-suffix">$</span>
-          </div>
-          {@render accionUtm()}
-        </div>
-      {:else}
-        <div class="input-wrapper">
+      <div class="input-wrapper">
           <input type="text" inputmode="numeric" id="utm_valor" name="utm_valor" class="form-input"
             placeholder="ej: 69.889" required
             value={campos.utmValor} oninput={alTeclearUtm} />
           <span class="input-suffix">$</span>
         </div>
-      {/if}
     </div>
 
     <!-- Mes -->
