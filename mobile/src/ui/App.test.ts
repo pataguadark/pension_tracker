@@ -3,8 +3,46 @@ import { fireEvent, render, screen } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { EjecutorNode } from '../data/ejecutor-node';
+import { inicializarBd } from '../data/esquema';
+import {
+  RepositorioConfiguracion, RepositorioPagos, RepositorioUtm,
+} from '../data/repositorio';
+import { ServicioUtm } from '../utm/servicio-utm';
 import App from './App.svelte';
+import { EstadoApp } from './estado.svelte';
 import { mensajes } from './mensajes.svelte';
+
+/** Cliente HTTP que falla: ninguna prueba puede depender de la red. */
+class HttpSinRed {
+  async obtenerJson(): Promise<unknown> {
+    throw new Error('sin red');
+  }
+}
+
+/** Base en memoria con un pago ya cargado, para probar el ✎ end-to-end. */
+async function montarEstadoConUnPago() {
+  const ejecutor = new EjecutorNode(':memory:');
+  await inicializarBd(ejecutor);
+  const repoPagos = new RepositorioPagos(ejecutor);
+  const repoUtm = new RepositorioUtm(ejecutor);
+  const config = new RepositorioConfiguracion(ejecutor);
+  const id = await repoPagos.insertarPago({
+    fecha: '2025-05-10',
+    mesPago: 5,
+    anioPago: 2025,
+    utmValor: 60_000,
+    cuotaPactada: 180_000,
+    montoPagado: 200_000,
+    desbalance: 20_000,
+    utmFactor: 3,
+  });
+  const estado = new EstadoApp(
+    repoPagos, new ServicioUtm(new HttpSinRed(), repoUtm), repoUtm, config,
+  );
+  await estado.cargar();
+  return { estado, id };
+}
 
 describe('App', () => {
   beforeEach(() => mensajes.limpiar());
@@ -107,6 +145,29 @@ describe('App', () => {
     const enlace = screen.getByRole('link', { name: 'Registrar Pago' });
     const noCancelado = fireEvent.click(enlace);
     expect(await noCancelado).toBe(false);
+  });
+});
+
+describe('App — el ✎ del historial abre la edición de ESE pago', () => {
+  // App.test.ts renderiza `App` sin `estado` en el resto de la suite, así
+  // que el historial nunca tiene filas ni un ✎ que pulsar: la única otra
+  // cobertura del ✎ es el callback `alEditar` de Historial.test.ts, que
+  // nunca llega hasta App. Sin esta prueba, `editar()` podría mutar
+  // `vista` a cualquier valor (incluso quedarse en 'historial') y las 514
+  // pruebas seguirían en verde.
+  beforeEach(() => mensajes.limpiar());
+
+  it('pulsar ✎ en una fila real lleva a Edicion con el id de esa fila', async () => {
+    const user = userEvent.setup();
+    const { estado, id } = await montarEstadoConUnPago();
+    const { container } = render(App, { estado });
+
+    const enlace = await screen.findByRole('link', { name: `Editar pago #${id}` });
+    await user.click(enlace);
+
+    expect(screen.getByRole('link', { name: 'Historial' })).not.toHaveClass('active');
+    expect(container.querySelector('.page-title')?.textContent).toContain('Editar Pago');
+    expect(container.querySelector('.page-title-anio')?.textContent?.trim()).toBe(`#${id}`);
   });
 });
 
