@@ -66,13 +66,16 @@
     <Historial {estado} alRegistrar={() => cambiar('registro')} alEditar={editar} />
   {:else if vista === 'edicion' && pagoEnEdicion !== null}
     <!--
-      La clave fuerza a remontar al cambiar de pago: Edicion lee el pago una
-      sola vez al abrirse, así que sin esto pasar del ✎ de una fila al de
-      otra dejaría el formulario con los datos del primero.
+      Sin `{#key}`: Edicion ya repuebla sus campos al cambiar de pago porque
+      su `$effect` lee `pagoId` como dependencia (Edicion.svelte:89-103), y
+      además el camino que un `{#key}` protegería es inalcanzable acá.
+      `alEditar` (que fija `pagoEnEdicion`) solo lo ofrece Historial, que
+      solo se pinta cuando `vista === 'historial'`; para llegar del ✎ de una
+      fila al ✎ de otra hay que pasar antes por `cambiar()` o
+      `volverAlHistorial()`, que sueltan `pagoEnEdicion` a null y desmontan
+      este componente. Nunca se pasa de un id a otro con Edicion montado.
     -->
-    {#key pagoEnEdicion}
-      <Edicion {estado} pagoId={pagoEnEdicion} alVolver={volverAlHistorial} />
-    {/key}
+    <Edicion {estado} pagoId={pagoEnEdicion} alVolver={volverAlHistorial} />
   {:else}
     <Registro {estado} alVolver={volverAlHistorial} />
   {/if}
