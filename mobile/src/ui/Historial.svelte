@@ -15,6 +15,7 @@
 -->
 <script lang="ts">
   import type { EstadoApp } from './estado.svelte';
+  import { eliminarPagoConConfirmacion } from './formato';
   import { mensajes } from './mensajes.svelte';
   import TablaPagos from './TablaPagos.svelte';
   import TarjetasResumen from './TarjetasResumen.svelte';
@@ -72,20 +73,18 @@
 
   /**
    * Port de `eliminar_pago` más la confirmación que el escritorio hace en
-   * el navegador. El texto del `confirm` es literal del `data-confirm` de
-   * historial.html:203; el de los avisos, literal de los dos flash de
-   * routes/pagos.py:307-309.
+   * el navegador. La orquestación (comprobar el estado ANTES de confirmar,
+   * confirmar, borrar, avisar) vive en `eliminarPagoConConfirmacion`
+   * (formato.ts): así se puede probar el orden sin depender de un ✕ real en
+   * el DOM, que con `estado` null no existe.
    */
   async function eliminar(id: number): Promise<void> {
-    if (!window.confirm(`¿Eliminar pago #${id}? Esta acción no se puede deshacer.`)) {
-      return;
-    }
-    if (!estado) return;
-    if (await estado.eliminarPago(id)) {
-      mensajes.agregar(`Pago #${id} eliminado correctamente.`, 'exito');
-    } else {
-      mensajes.agregar(`No se encontró el pago #${id}.`, 'error');
-    }
+    await eliminarPagoConConfirmacion(
+      estado,
+      id,
+      (m) => window.confirm(m),
+      (texto, tipo) => mensajes.agregar(texto, tipo),
+    );
   }
 </script>
 
