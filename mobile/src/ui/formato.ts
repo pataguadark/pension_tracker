@@ -14,8 +14,6 @@
 import { estadoDe } from '../core/calculos';
 import { formatearPesos } from '../core/formatters';
 import type { Estado } from '../core/tipos';
-import type { EstadoApp } from './estado.svelte';
-import type { TipoMensaje } from './mensajes.svelte';
 
 /**
  * Monto con el signo ANTES del símbolo de peso: "-$80.000", "+$20.000".
@@ -83,37 +81,4 @@ const MESES = [
 /** Período de un pago: "Ago 2025". El mes viene en base uno. */
 export function etiquetaPeriodo(anio: number, mes: number): string {
   return `${MESES[mes - 1] ?? mes} ${anio}`;
-}
-
-/**
- * Orquesta el borrado de un pago desde Historial: comprueba que haya una
- * base abierta ANTES de pedir confirmación —igual que Registro y Edicion,
- * que avisan sin confirmar nada si la base está cerrada—, confirma, borra y
- * avisa. El texto del `confirm` es literal del `data-confirm` de
- * historial.html:203; el de los avisos, literal de los dos flash de
- * routes/pagos.py:307-309.
- *
- * Se saca de Historial.svelte (y `confirmar`/`avisar` se reciben inyectados
- * en vez de leer `window.confirm`/`mensajes` directo) para poder probar el
- * ORDEN sin depender de un ✕ real en el DOM: con `estado` null no hay filas
- * que pintar, así que un clic real jamás llega a este código.
- */
-export async function eliminarPagoConConfirmacion(
-  estado: Pick<EstadoApp, 'eliminarPago'> | null,
-  id: number,
-  confirmar: (mensaje: string) => boolean,
-  avisar: (texto: string, tipo: TipoMensaje) => void,
-): Promise<void> {
-  if (!estado) {
-    avisar('Error al procesar el pago: la base de datos no está abierta.', 'error');
-    return;
-  }
-  if (!confirmar(`¿Eliminar pago #${id}? Esta acción no se puede deshacer.`)) {
-    return;
-  }
-  if (await estado.eliminarPago(id)) {
-    avisar(`Pago #${id} eliminado correctamente.`, 'exito');
-  } else {
-    avisar(`No se encontró el pago #${id}.`, 'error');
-  }
 }

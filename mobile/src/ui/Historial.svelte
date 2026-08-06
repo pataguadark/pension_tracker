@@ -15,7 +15,7 @@
 -->
 <script lang="ts">
   import type { EstadoApp } from './estado.svelte';
-  import { eliminarPagoConConfirmacion } from './formato';
+  import { eliminarPagoConConfirmacion } from './acciones';
   import { mensajes } from './mensajes.svelte';
   import TablaPagos from './TablaPagos.svelte';
   import TarjetasResumen from './TarjetasResumen.svelte';
