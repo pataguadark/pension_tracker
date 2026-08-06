@@ -245,7 +245,11 @@ export function validarFormulario(campos: CamposFormulario): ResultadoValidacion
     try {
       calcularCuotaPactada(utmFactor, utmValor);
     } catch {
-      errores.push('El factor UTM es demasiado grande para calcular la cuota.');
+      // Literal del escritorio: calculation_service.calcular_cuota_pactada
+      // lanza este mismo texto, y registro_post lo muestra al usuario.
+      // No culpa al factor porque el desborde puede venir de cualquiera
+      // de los dos operandos.
+      errores.push('La cuota pactada calculada no es un valor finito.');
       utmFactor = null;
     }
   }

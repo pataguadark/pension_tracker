@@ -152,7 +152,16 @@ describe('validarFormulario', () => {
     const r = validarFormulario({
       ...validos, factor: 'x', utmValor: 'x', mesPago: '99', anioPago: '10',
     });
-    expect(r.errores.length).toBe(4);
+    // El ORDEN importa: _validar_formulario_pago valida factor, UTM, monto,
+    // mes y año en ese orden, y el usuario lee los errores en el orden en
+    // que aparecen los campos. Sin esta aserción, invertir dos bloques de
+    // validación dejaba la suite entera en verde.
+    expect(r.errores).toEqual([
+      'El factor UTM debe ser un número positivo (ej: 3,0561).',
+      'El valor UTM debe ser un número entero positivo (ej: 69.889).',
+      'El mes debe ser un número entre 1 y 12.',
+      'El año debe ser un número válido (ej: 2024).',
+    ]);
     expect(r.valores).toBeNull();
   });
 
