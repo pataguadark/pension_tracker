@@ -119,6 +119,22 @@ describe('Edición — precarga', () => {
     expect(campo(/Factor UTM pactado/).value).toBe('3,1167');
   });
 
+  it('un empate binario exacto redondea al par, como el escritorio, no hacia arriba', async () => {
+    // 101.000 / 32.000 = 3,15625 exacto (101/32 es representable sin error
+    // en un double): un empate real, no uno fabricado por el escaleo.
+    // Python redondea el empate AL PAR (round(3.15625, 4) == 3.1562);
+    // toFixed(4) redondea el empate HACIA ARRIBA ((3.15625).toFixed(4) ==
+    // "3.1563"). Sin el redondear(..., 4) de factorDeEdicion, fmtFactor
+    // recibe el valor crudo y el campo mostraría "3,1563", un peso distinto
+    // de lo que ve el escritorio.
+    const { estado, id } = await montarEstado(pagoDe({
+      utmFactor: null, cuotaPactada: 101_000, utmValor: 32_000,
+    }));
+    render(Edicion, { estado, pagoId: id, alVolver: () => {} });
+    await dejarCorrer();
+    expect(campo(/Factor UTM pactado/).value).toBe('3,1562');
+  });
+
   it('sin factor y sin UTM utilizable deja el campo vacío', async () => {
     // La rama `else: utm_factor_calculado = None` de editar_pago. Dividir por
     // cero daría Infinity y el campo mostraría basura.
