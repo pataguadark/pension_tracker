@@ -116,6 +116,20 @@ def validar(ruta: Path) -> InformeValidacion:
         for tabla in ("utm_historial", "configuracion"):
             if _estructura(conn, tabla) != COLUMNAS_ESPERADAS[tabla]:
                 raise RespaldoInvalido(MENSAJE_ESQUEMA_AJENO)
+
+        # Tablas de más también son esquema ajeno: sin este chequeo, un
+        # archivo con las tres tablas correctas más contenido de otra
+        # aplicación pasaría la validación. Se excluye el prefijo
+        # `sqlite_` porque sqlite crea `sqlite_sequence` por su cuenta en
+        # cuanto se inserta la primera fila en una tabla AUTOINCREMENT
+        # (pagos y utm_historial la tienen): toda base real de esta
+        # aplicación la trae, y no es contenido ajeno sino del motor.
+        filas = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table'"
+        ).fetchall()
+        tablas = {f["name"] for f in filas if not f["name"].startswith("sqlite_")}
+        if tablas != set(COLUMNAS_ESPERADAS):
+            raise RespaldoInvalido(MENSAJE_ESQUEMA_AJENO)
     finally:
         conn.close()
 

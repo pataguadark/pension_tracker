@@ -128,6 +128,23 @@ def test_rechaza_una_tabla_con_columnas_distintas(tmp_path):
         importador.validar(ruta)
 
 
+def test_rechaza_una_base_con_una_tabla_de_mas(tmp_path):
+    """
+    Las tres tablas esperadas están, correctas, pero hay una cuarta ajena.
+    Sin esta comprobación el validador adoptaría cualquier archivo que
+    además de la estructura propia traiga contenido de otra aplicación.
+    """
+    ruta = tmp_path / "con_extra.db"
+    _crear_respaldo(ruta)
+    conn = sqlite3.connect(ruta)
+    conn.execute("CREATE TABLE notas (id INTEGER PRIMARY KEY, texto TEXT)")
+    conn.commit()
+    conn.close()
+
+    with pytest.raises(importador.RespaldoInvalido, match="no de esta aplicación"):
+        importador.validar(ruta)
+
+
 def test_rechaza_una_base_danada(tmp_path):
     """
     Un archivo con cabecera de SQLite pero con las páginas rotas: sqlite lo
