@@ -17,6 +17,16 @@ jobs:
         run: uv python install 3.12
       - name: Instalar dependencias
         run: uv sync
+      # tests/test_interoperabilidad_db.py levanta el lado TypeScript con
+      # `npx vite-node` para comprobar que las dos plataformas leen el mismo
+      # .db. Sin Node ni node_modules, esas nueve pruebas mueren con
+      # FileNotFoundError y el job entero queda rojo aunque el código esté
+      # bien: es lo que venía pasando desde que se agregó el archivo.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Instalar dependencias del móvil (para las pruebas de interoperabilidad)
+        run: npm ci --prefix mobile
       - name: Tests de Python (incluye fixtures doradas)
         run: uv run pytest -q
 
