@@ -147,6 +147,16 @@ esas variables deja `1` y `"1.0"`, que sirven para depuración y no para
 distribuir.
 
 ## Pendiente
+- **La publicación del APK está en pausa deliberada.** El móvil todavía no
+  tiene forma de sacar los datos del teléfono (no existen
+  `mobile/src/data/respaldo.ts` ni un importador), así que quien instalara
+  un APK publicado se quedaría sin vía de escape para su registro de pagos.
+  Por eso el job `android` de `.github/workflows/build.yml` ya no corre al
+  etiquetar: solo se dispara a mano (`workflow_dispatch`), para poder seguir
+  ejercitando el pipeline sin publicar. La firma y el cálculo de versión
+  desde el tag (secciones de arriba) ya están hechos y probados, no hay que
+  rehacerlos: para reactivar la publicación basta con implementar el
+  respaldo y volver a agregar `android` al `needs` del job `release`.
 - **F-Droid.** Compila desde el código y firma con su propia llave, así que su
   APK y el de GitHub Releases no son intercambiables: quien instale desde un
   canal tendrá que desinstalar para cambiarse al otro.
