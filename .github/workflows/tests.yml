@@ -39,3 +39,43 @@ jobs:
         run: npm test --prefix mobile
       - name: Construir el bundle
         run: npm run build --prefix mobile
+
+  # `mobile/android/` está versionado pero ningún otro job lo toca: el de
+  # TypeScript llega hasta `vite build` y ahí se detiene. Sin esto, cualquier
+  # cosa que rompa el proyecto nativo -una versión de SDK que ya no está, un
+  # plugin que cambió su bloque de Gradle, un recurso mal referenciado- solo
+  # se descubre al compilar a mano en la máquina de desarrollo.
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+      - name: Instalar el SDK de Android
+        uses: android-actions/setup-android@v3
+        with:
+          # `platforms;android-36` lo pide `compileSdkVersion` de
+          # variables.gradle; `build-tools;35.0.0` es la versión que el plugin
+          # de Android 8.13 usa por defecto. Se declaran en vez de confiar en
+          # lo que traiga la imagen del runner, que cambia sin aviso.
+          packages: "platform-tools platforms;android-36 build-tools;35.0.0"
+      - name: Instalar dependencias
+        run: npm ci
+        working-directory: mobile
+      - name: Construir el bundle
+        run: npm run build
+        working-directory: mobile
+      - name: Copiar el bundle al proyecto nativo
+        # Sin `cap sync` Gradle empaqueta los assets de la compilación
+        # anterior; acá, en un checkout limpio, directamente no habría ninguno.
+        run: npx cap sync android
+        working-directory: mobile
+      - name: Compilar el APK de depuración
+        run: ./gradlew assembleDebug
+        working-directory: mobile/android

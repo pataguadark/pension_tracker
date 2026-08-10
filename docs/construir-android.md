@@ -9,7 +9,12 @@ Lo que sigue es lo mínimo para compilar un APK desde cero.
 |---|---|
 | Node | 22 |
 | JDK | Temurin 21 |
-| Android SDK | platform-tools, platforms;android-34, build-tools;34.0.0 |
+| Android SDK | platform-tools, platforms;android-36, build-tools;35.0.0 |
+
+La plataforma tiene que ser la **36**: es la que declara `compileSdkVersion` en
+`mobile/android/variables.gradle`. Las build-tools son la **35.0.0** porque es
+la versión que el plugin de Android 8.13 elige por defecto; no hay que
+declararla en ningún `.gradle`, pero sí tiene que estar instalada.
 
 Ninguna necesita instalarse en el sistema: bastan un JDK y un SDK
 descomprimidos donde sea, con las variables de entorno apuntando ahí. En la
@@ -26,23 +31,32 @@ export PATH="$JAVA_HOME/bin:$ANDROID_HOME/platform-tools:$PATH"
 El SDK se instala con las herramientas de línea de comandos de Android:
 
 ```bash
-sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+sdkmanager "platform-tools" "platforms;android-36" "build-tools;35.0.0"
 ```
 
 ## Compilar
 
 ```bash
-npm ci --prefix mobile
-npm run build --prefix mobile          # genera mobile/dist/
-npx --prefix mobile cap sync android   # copia dist/ al proyecto nativo
-cd mobile/android && ./gradlew assembleDebug
+cd mobile
+npm ci
+npm run build           # genera mobile/dist/
+npx cap sync android    # copia dist/ al proyecto nativo
+cd android && ./gradlew assembleDebug
 ```
 
 El APK queda en `mobile/android/app/build/outputs/apk/debug/app-debug.apk`.
 
+**Los comandos se corren desde `mobile/`, no desde la raíz.** `npm` acepta
+`--prefix mobile`, pero `npx --prefix mobile cap sync android` **no funciona**:
+Capacitor busca el proyecto en el directorio actual, ignora el prefijo y corta
+con "android platform has not been added yet".
+
 **`cap sync` no es opcional.** Copia `mobile/dist/` dentro del proyecto
 nativo; sin ese paso Gradle empaqueta el bundle de la compilación anterior y
 el APK sale con código viejo sin que nada falle.
+
+Esta misma secuencia la corre el job `android` de `.github/workflows/tests.yml`
+en cada push, así que si acá cambia algo, allá también.
 
 ## Instalar en un dispositivo
 
