@@ -161,3 +161,52 @@ def test_rechaza_una_base_danada(tmp_path):
 
     with pytest.raises(importador.RespaldoInvalido):
         importador.validar(ruta)
+
+
+@pytest.fixture
+def base_viva(tmp_path, monkeypatch):
+    """
+    Una base de la aplicación en tmp_path, con un pago, puesta como la base
+    activa. monkeypatch y no asignación directa: si no, el test siguiente
+    hereda la ruta.
+    """
+    from pensiontracker.database import db_manager
+
+    ruta = tmp_path / "pension_tracker.db"
+    monkeypatch.setattr(db_manager, "DB_PATH", ruta)
+    db_manager.inicializar_db()
+    db_manager.insertar_pago("2026-06-10", 6, 2026, 69000.0, 207000.0,
+                             207000.0, 0.0, 3.0)
+    return ruta
+
+
+def test_la_copia_previa_es_una_base_legible_con_los_mismos_pagos(base_viva):
+    copia = importador.respaldar_base_actual()
+
+    assert copia.exists()
+    conn = sqlite3.connect(copia)
+    filas = conn.execute("SELECT monto_pagado FROM pagos").fetchall()
+    conn.close()
+    assert filas == [(207000.0,)]
+
+
+def test_solo_se_conservan_las_tres_copias_mas_recientes(base_viva):
+    rutas = [importador.respaldar_base_actual() for _ in range(5)]
+
+    vivas = sorted(base_viva.parent.glob(f"{base_viva.name}.previo-*"))
+    assert len(vivas) == importador.COPIAS_A_CONSERVAR
+    # Las que sobreviven son las últimas tres creadas.
+    assert vivas == sorted(rutas[-3:])
+
+
+def test_dos_copias_en_el_mismo_segundo_no_se_pisan(base_viva):
+    """
+    La marca de tiempo llega al segundo. Cinco importaciones seguidas en un
+    test caben de sobra dentro del mismo, y sin desambiguar la segunda
+    sobreescribiría a la primera y la rotación contaría mal.
+    """
+    primera = importador.respaldar_base_actual()
+    segunda = importador.respaldar_base_actual()
+
+    assert primera != segunda
+    assert primera.exists() and segunda.exists()

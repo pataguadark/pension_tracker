@@ -10,9 +10,13 @@ propia. Nunca se adopta el archivo ajeno como base de la aplicación.
 Diseño completo: docs/specs/2026-08-10-importador-respaldo.md
 """
 
+import os
 import sqlite3
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
+
+from pensiontracker.database import db_manager
 
 # Estructura que tiene que tener el archivo recibido: por columna, su
 # nombre, su tipo declarado y si admite NULL.
@@ -134,3 +138,78 @@ def validar(ruta: Path) -> InformeValidacion:
         conn.close()
 
     return InformeValidacion(tiene_utm_factor=not legacy)
+
+
+COPIAS_A_CONSERVAR = 3
+SUFIJO_COPIA = "previo-"
+
+
+def _ruta_para_la_copia() -> Path:
+    """
+    Ruta libre para la copia de esta importación.
+
+    La marca de tiempo llega al segundo, así que dos importaciones seguidas
+    la comparten; el contador desambigua para que la segunda no pise a la
+    primera y la rotación no cuente de menos. El contador nunca se reutiliza,
+    incluso después de rotaciones que borren copias antiguas.
+    """
+    base = db_manager.DB_PATH
+    marca = datetime.now().strftime("%Y%m%d-%H%M%S")
+    patron = f"{base.name}.{SUFIJO_COPIA}{marca}"
+
+    # Extraer el contador más alto para esta marca de tiempo
+    existentes = base.parent.glob(f"{patron}*")
+    contador_logico_maximo = 0
+    for ruta in existentes:
+        nombre = ruta.name
+        if nombre == patron:
+            # Existe la versión sin contador
+            contador_logico_maximo = max(contador_logico_maximo, 1)
+        else:
+            sufijo = f"{patron}-"
+            if nombre.startswith(sufijo):
+                try:
+                    num = int(nombre[len(sufijo):])
+                    contador_logico_maximo = max(contador_logico_maximo, num)
+                except ValueError:
+                    pass
+
+    # Devolver el siguiente nombre disponible
+    if contador_logico_maximo == 0:
+        return base.parent / patron
+    elif contador_logico_maximo == 1:
+        return base.parent / f"{patron}-2"
+    else:
+        return base.parent / f"{patron}-{contador_logico_maximo + 1}"
+
+
+def _rotar_copias() -> None:
+    """Deja solo las COPIAS_A_CONSERVAR más recientes."""
+    base = db_manager.DB_PATH
+    copias = sorted(base.parent.glob(f"{base.name}.{SUFIJO_COPIA}*"))
+    for vieja in copias[:-COPIAS_A_CONSERVAR]:
+        vieja.unlink()
+
+
+def respaldar_base_actual() -> Path:
+    """
+    Copia la base viva antes de reemplazarla y devuelve dónde quedó.
+
+    Usa la API `.backup` de sqlite, que produce una copia consistente
+    aunque haya escrituras en curso; copiar el archivo a mano no lo
+    garantiza.
+    """
+    destino = _ruta_para_la_copia()
+    origen = db_manager.get_connection()
+    copia = sqlite3.connect(destino)
+    try:
+        origen.backup(copia)
+    finally:
+        copia.close()
+        origen.close()
+
+    if os.name == "posix":
+        os.chmod(destino, 0o600)
+
+    _rotar_copias()
+    return destino
