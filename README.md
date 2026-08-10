@@ -200,6 +200,35 @@ En Linux y macOS el directorio queda con permisos `0700` y los archivos con `060
 
 ---
 
+## Resguardo de la información
+
+Tus pagos viven en un solo archivo, en tu equipo. Nadie más tiene una copia:
+ni este proyecto, ni un servidor, ni la nube. Eso es deliberado, y significa
+que el respaldo es tuyo y de nadie más.
+
+**Respaldar.** En el historial, "↓ Respaldar datos" descarga un archivo `.db`
+con todo tu registro. Guárdalo donde no dependa del mismo equipo: un pendrive,
+un correo a ti mismo, tu nube preferida. Conviene hacerlo cada vez que
+registras un pago, y como mínimo una vez al mes.
+
+**Restaurar.** En el mismo lugar, "↑ Importar respaldo" toma ese archivo y
+reemplaza **todo** lo que tengas registrado. Antes de tocar nada, la
+aplicación guarda una copia de tu base actual junto a ella (verás un archivo
+`pension_tracker.db.previo-...` en el directorio de datos), y conserva las
+tres más recientes. Si importas por error, ahí está lo que tenías.
+
+**El archivo sirve en las dos plataformas.** El mismo `.db` se abre en el
+computador y en el teléfono, así que respaldar en uno y restaurar en el otro
+es la forma de mudarte de equipo.
+
+Un archivo que no sea un respaldo válido se rechaza sin alterar nada, y te
+dice por qué: no es una base de datos, está dañada, o es de otra aplicación.
+
+**Si pierdes el equipo y no tienes un respaldo guardado en otra parte, pierdes
+el registro completo.** No hay forma de recuperarlo desde acá.
+
+---
+
 ## Limitaciones conocidas
 
 Vale la pena decirlas de frente:
@@ -210,15 +239,12 @@ Vale la pena decirlas de frente:
   el computador, tenlo presente.
 - **Los binarios no están firmados** — de ahí los avisos de SmartScreen y Gatekeeper.
 - **macOS solo Apple Silicon** por ahora.
-- **No hay restauración de respaldo desde la interfaz**: puedes descargar el `.db`,
-  pero para restaurarlo hay que copiarlo a mano al directorio de datos.
 - **No hay apps nativas de Android ni iOS** todavía, solo la PWA vía `--lan`.
 - **La app no valida tu acuerdo**: el factor UTM lo ingresas tú y la app confía en él.
 
 ## Roadmap
 
 - [ ] Cifrado de la base de datos (SQLCipher)
-- [ ] Restaurar respaldo desde la propia interfaz
 - [ ] App Android nativa (Capacitor)
 - [ ] App iOS nativa (Capacitor)
 - [ ] Instalador propiamente tal en Windows, y build para Mac Intel
