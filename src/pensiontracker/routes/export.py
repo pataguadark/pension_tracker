@@ -123,6 +123,18 @@ def importar_respaldo():
     except importador.RespaldoInvalido as exc:
         flash(str(exc), "error")
         return redirect(url_for("pagos.historial"))
+    except OSError:
+        # archivo.save() o la copia previa (services/importador.py) pueden
+        # fallar por E/S -disco lleno, permisos- antes de que se abra la
+        # transacción que reemplaza la base. Es cierto que los datos no se
+        # tocaron: se lo decimos al usuario en vez de dejarlo ver un 500. Sin
+        # ruta ni detalle del sistema en el mensaje: es una restricción del
+        # proyecto.
+        flash(
+            "No se pudo escribir el respaldo en el disco. Tus datos no se tocaron.",
+            "error",
+        )
+        return redirect(url_for("pagos.historial"))
     finally:
         os.remove(tmp_path)
 

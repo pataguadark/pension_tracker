@@ -12,6 +12,7 @@ Diseño completo: docs/specs/2026-08-10-importador-respaldo.md
 
 import os
 import sqlite3
+import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -198,16 +199,34 @@ def respaldar_base_actual() -> Path:
     Usa la API `.backup` de sqlite, que produce una copia consistente
     aunque haya escrituras en curso; copiar el archivo a mano no lo
     garantiza.
+
+    `sqlite3.connect()` crea el archivo de destino en disco de inmediato,
+    antes de que `.backup()` copie una sola página. Si `.backup()` falla a
+    mitad de camino (disco lleno, error de E/S), escribir directo al nombre
+    definitivo dejaría un archivo de 0 bytes con el nombre de una copia
+    válida: `_rotar_copias()` lo contaría como buena en el `sorted()` y
+    empujaría fuera de la ventana a una copia real. Por eso se escribe a un
+    nombre temporal -que no matchea el patrón que usa `_rotar_copias()`- y
+    solo se renombra al nombre definitivo después de que `.backup()` haya
+    tenido éxito; si falla, se borra el temporal y se re-levanta.
     """
+    base = db_manager.DB_PATH
     destino = _ruta_para_la_copia()
+    temporal = base.parent / f"{base.name}.escribiendo-{uuid.uuid4().hex}"
+
     origen = db_manager.get_connection()
-    copia = sqlite3.connect(destino)
+    copia = sqlite3.connect(temporal)
     try:
         origen.backup(copia)
-    finally:
+    except Exception:
         copia.close()
         origen.close()
+        temporal.unlink(missing_ok=True)
+        raise
+    copia.close()
+    origen.close()
 
+    temporal.rename(destino)
     if os.name == "posix":
         os.chmod(destino, 0o600)
 

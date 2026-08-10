@@ -566,6 +566,38 @@ def test_importar_un_archivo_invalido_avisa_y_no_borra_nada(client, tmp_path):
     assert b"213.588" in resp.data
 
 
+def test_importar_con_fallo_de_disco_avisa_y_no_da_500(client, tmp_path, monkeypatch):
+    """
+    Si archivo.save() o la copia previa fallan por E/S (disco lleno,
+    permisos), el usuario debe ver un mensaje, no un 500 crudo justo cuando
+    intenta restaurar su registro.
+    """
+    from pensiontracker.services import importador
+
+    _registrar_pago(client)
+
+    resp = client.get("/historial")
+    token = extraer_csrf_token(resp.get_data(as_text=True))
+
+    def falla_por_disco_lleno(ruta):
+        raise OSError("disco lleno sintético")
+
+    monkeypatch.setattr(importador, "importar", falla_por_disco_lleno)
+
+    resp = client.post("/importar", data={
+        "csrf_token": token,
+        "respaldo": (io.BytesIO(_respaldo_en_memoria(tmp_path)), "respaldo.db"),
+    }, content_type="multipart/form-data", follow_redirects=True)
+
+    assert resp.status_code == 200
+    assert "No se pudo escribir el respaldo en el disco".encode() in resp.data
+    assert "Tus datos no se tocaron".encode() in resp.data
+    # El mensaje no delata detalles del sistema.
+    assert b"disco lleno sint" not in resp.data
+    # El pago original sigue ahí.
+    assert b"213.588" in resp.data
+
+
 def test_importar_sin_archivo_avisa(client):
     # Hace falta un pago: `.historial-actions` -y con él el csrf_token- vive
     # dentro del `{% if %}` de "hay pagos", así que con la base vacía el

@@ -199,6 +199,43 @@ def test_solo_se_conservan_las_tres_copias_mas_recientes(base_viva):
     assert vivas == sorted(rutas[-3:])
 
 
+def test_un_backup_a_medio_escribir_no_deja_copia_contada_como_buena(
+    base_viva, monkeypatch
+):
+    """
+    Si origen.backup(copia) falla a mitad de camino -disco lleno, error de
+    E/S-, no debe quedar ningún archivo que matchee el patrón de copias: uno
+    de 0 bytes se colaría en _rotar_copias() como si fuera una copia buena,
+    empujando fuera de la ventana de tres a una copia real.
+
+    `sqlite3.Connection` es un tipo inmutable de la extensión C: no admite
+    parchar `.backup` en la clase. Se reemplaza en cambio la conexión que
+    devuelve `db_manager.get_connection()` -la única que
+    `respaldar_base_actual()` usa como origen- por un doble que falla al
+    respaldar y delega el cierre en la conexión real.
+    """
+    from pensiontracker.database import db_manager
+
+    conexion_real = db_manager.get_connection()
+
+    class ConexionQueFallaAlRespaldar:
+        def backup(self, *args, **kwargs):
+            raise sqlite3.OperationalError("fallo sintético de E/S")
+
+        def close(self):
+            conexion_real.close()
+
+    monkeypatch.setattr(
+        db_manager, "get_connection", lambda: ConexionQueFallaAlRespaldar()
+    )
+
+    with pytest.raises(sqlite3.OperationalError):
+        importador.respaldar_base_actual()
+
+    copias = list(base_viva.parent.glob(f"{base_viva.name}.previo-*"))
+    assert copias == []
+
+
 def test_dos_copias_en_el_mismo_segundo_no_se_pisan(base_viva):
     """
     La marca de tiempo llega al segundo. Cinco importaciones seguidas en un
