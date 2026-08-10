@@ -93,7 +93,18 @@ jobs:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.artifact }}.zip
 
+  # En pausa deliberada: el móvil todavía no tiene forma de sacar los datos
+  # del teléfono (no existen mobile/src/data/respaldo.ts ni importador.ts,
+  # ver Historial.svelte). Publicar el APK ahora dejaría a quien lo instale
+  # sin vía de escape para su registro de pagos, y con allowBackup=false
+  # (ver AndroidManifest.xml) tampoco quedaría una copia en la nube de
+  # Google que lo salve. El job sigue compilando y firmando -eso ya está
+  # hecho y probado- pero solo a mano, vía workflow_dispatch, para poder
+  # seguir ejercitando el pipeline sin publicar. Para reactivarlo: escribir
+  # respaldo.ts (y su importador) y volver a agregar "android" al `needs`
+  # del job release.
   android:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -188,7 +199,7 @@ jobs:
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [build, android]
+    needs: [build]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -197,7 +208,7 @@ jobs:
         with:
           path: artifacts
 
-      - name: Crear release con los 3 binarios y el APK
+      - name: Crear release con los 3 binarios
         uses: softprops/action-gh-release@v2
         with:
           files: artifacts/**/*
