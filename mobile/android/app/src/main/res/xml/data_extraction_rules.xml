@@ -1,10 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Vacíos a propósito: ni Auto Backup a la nube ni transferencia entre
-  dispositivos deben llevarse el registro de pagos. Ver el comentario en
-  AndroidManifest.xml sobre allowBackup para el porqué completo.
+  Ni la copia a la nube ni la transferencia entre dispositivos deben llevarse
+  el registro de pagos. Ver el comentario en AndroidManifest.xml sobre
+  allowBackup para el porqué completo.
+
+  Las exclusiones son explícitas y no secciones vacías: una sección sin reglas
+  NO excluye nada -Android incluye todo por defecto cuando no hay `include`-,
+  así que un `<device-transfer />` a secas habría dejado pasar la base entera
+  al cambiar de teléfono. Y `allowBackup="false"` tampoco cubre ese caso: en
+  API 31+ la transferencia dispositivo a dispositivo se rige por este archivo,
+  no por ese atributo.
 -->
 <data-extraction-rules>
-    <cloud-backup />
-    <device-transfer />
+    <cloud-backup>
+        <exclude domain="root" />
+        <exclude domain="file" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+        <exclude domain="external" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="root" />
+        <exclude domain="file" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+        <exclude domain="external" />
+    </device-transfer>
 </data-extraction-rules>
