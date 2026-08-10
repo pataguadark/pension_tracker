@@ -213,3 +213,84 @@ def respaldar_base_actual() -> Path:
 
     _rotar_copias()
     return destino
+
+
+TABLAS = ("pagos", "utm_historial", "configuracion")
+
+
+@dataclass(frozen=True)
+class ResumenImportacion:
+    """Cuántas filas entró cada tabla y dónde quedó la base anterior."""
+
+    pagos: int
+    utm_historial: int
+    configuracion: int
+    copia_previa: Path
+
+
+def _insertar_filas(
+    conn: sqlite3.Connection,
+    tabla: str,
+    filas: list[sqlite3.Row],
+    informe: InformeValidacion,
+) -> None:
+    """
+    Inserta las filas leídas conservando sus `id`.
+
+    Conservarlos es lo que hace que restaurar sea idempotente: si se
+    reasignaran, importar dos veces el mismo respaldo produciría bases
+    distintas.
+    """
+    if not filas:
+        return
+
+    columnas = [c[0] for c in COLUMNAS_ESPERADAS[tabla]]
+    if tabla == "pagos" and not informe.tiene_utm_factor:
+        # La base de origen no tiene la columna: entra como NULL, que es lo
+        # mismo que hace la migración de arranque (db_manager.py:88-97).
+        valores = [
+            tuple(fila[c] for c in columnas[:-1]) + (None,) for fila in filas
+        ]
+    else:
+        valores = [tuple(fila[c] for c in columnas) for fila in filas]
+
+    marcadores = ", ".join("?" * len(columnas))
+    conn.executemany(
+        f"INSERT INTO {tabla} ({', '.join(columnas)}) VALUES ({marcadores})",
+        valores,
+    )
+
+
+def importar(ruta: Path) -> ResumenImportacion:
+    """
+    Reemplaza el contenido de la base viva por el del respaldo.
+
+    El orden importa: validar antes de copiar nada, copiar la base actual
+    antes de abrir la transacción, y hacer todo el reemplazo dentro de ella.
+    Si algo falla en cualquier punto, la base viva queda como estaba.
+    """
+    informe = validar(ruta)
+    copia_previa = respaldar_base_actual()
+
+    origen = _abrir_solo_lectura(ruta)
+    destino = db_manager.get_connection()
+    try:
+        filas = {t: origen.execute(f"SELECT * FROM {t}").fetchall() for t in TABLAS}
+
+        # `with destino:` confirma al salir y revierte si sale por excepción.
+        # No cierra la conexión: de eso se encarga el finally.
+        with destino:
+            for tabla in TABLAS:
+                destino.execute(f"DELETE FROM {tabla}")
+            for tabla in TABLAS:
+                _insertar_filas(destino, tabla, filas[tabla], informe)
+    finally:
+        origen.close()
+        destino.close()
+
+    return ResumenImportacion(
+        pagos=len(filas["pagos"]),
+        utm_historial=len(filas["utm_historial"]),
+        configuracion=len(filas["configuracion"]),
+        copia_previa=copia_previa,
+    )

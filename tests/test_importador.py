@@ -210,3 +210,108 @@ def test_dos_copias_en_el_mismo_segundo_no_se_pisan(base_viva):
 
     assert primera != segunda
     assert primera.exists() and segunda.exists()
+
+
+def test_importar_reemplaza_los_pagos_conservando_los_id(base_viva, tmp_path):
+    respaldo = tmp_path / "respaldo.db"
+    _crear_respaldo(respaldo)
+
+    resumen = importador.importar(respaldo)
+
+    from pensiontracker.database import db_manager
+    pagos = db_manager.obtener_todos_los_pagos()
+    assert len(pagos) == 1
+    assert pagos[0]["id"] == 1
+    assert pagos[0]["monto_pagado"] == 200000.0
+    assert resumen.pagos == 1
+
+
+def test_importar_un_respaldo_legacy_deja_utm_factor_en_null(base_viva, tmp_path):
+    respaldo = tmp_path / "legacy.db"
+    _crear_respaldo(respaldo, con_utm_factor=False)
+
+    importador.importar(respaldo)
+
+    from pensiontracker.database import db_manager
+    pagos = db_manager.obtener_todos_los_pagos()
+    assert pagos[0]["utm_factor"] is None
+
+
+def test_importar_deja_una_copia_de_la_base_anterior(base_viva, tmp_path):
+    respaldo = tmp_path / "respaldo.db"
+    _crear_respaldo(respaldo)
+
+    resumen = importador.importar(respaldo)
+
+    conn = sqlite3.connect(resumen.copia_previa)
+    anteriores = conn.execute("SELECT monto_pagado FROM pagos").fetchall()
+    conn.close()
+    # El pago que tenía la base viva antes de importar, no el del respaldo.
+    assert anteriores == [(207000.0,)]
+
+
+def test_un_archivo_invalido_no_toca_los_datos_existentes(base_viva, tmp_path):
+    respaldo = tmp_path / "basura.db"
+    respaldo.write_bytes(b"esto no es una base de datos")
+
+    with pytest.raises(importador.RespaldoInvalido):
+        importador.importar(respaldo)
+
+    from pensiontracker.database import db_manager
+    pagos = db_manager.obtener_todos_los_pagos()
+    assert len(pagos) == 1
+    assert pagos[0]["monto_pagado"] == 207000.0
+
+
+def test_importar_aborta_si_no_se_puede_escribir_la_copia_previa(
+    base_viva, tmp_path, monkeypatch
+):
+    """
+    La copia previa se hace ANTES de abrir la transacción, justamente para
+    que un disco lleno o un permiso denegado aborten sin haber tocado la
+    base. Si el orden se invirtiera, esta prueba lo caza.
+    """
+    respaldo = tmp_path / "respaldo.db"
+    _crear_respaldo(respaldo)
+
+    def explota() -> Path:
+        raise OSError("disco lleno sintético")
+
+    monkeypatch.setattr(importador, "respaldar_base_actual", explota)
+
+    with pytest.raises(OSError):
+        importador.importar(respaldo)
+
+    from pensiontracker.database import db_manager
+    pagos = db_manager.obtener_todos_los_pagos()
+    assert len(pagos) == 1
+    assert pagos[0]["monto_pagado"] == 207000.0
+
+
+def test_un_fallo_a_mitad_de_la_transaccion_deja_la_base_como_estaba(
+    base_viva, tmp_path, monkeypatch
+):
+    """
+    Se hace explotar la inserción de `configuracion`, que va después de la
+    de `pagos`: si el reemplazo no fuera atómico, quedarían los pagos del
+    respaldo y la configuración de la base vieja.
+    """
+    respaldo = tmp_path / "respaldo.db"
+    _crear_respaldo(respaldo)
+
+    original = importador._insertar_filas
+
+    def explota(conn, tabla, filas, informe):
+        if tabla == "configuracion":
+            raise sqlite3.OperationalError("fallo sintético")
+        return original(conn, tabla, filas, informe)
+
+    monkeypatch.setattr(importador, "_insertar_filas", explota)
+
+    with pytest.raises(sqlite3.OperationalError):
+        importador.importar(respaldo)
+
+    from pensiontracker.database import db_manager
+    pagos = db_manager.obtener_todos_los_pagos()
+    assert len(pagos) == 1
+    assert pagos[0]["monto_pagado"] == 207000.0
