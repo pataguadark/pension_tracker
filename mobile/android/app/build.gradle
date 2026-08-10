@@ -1,5 +1,16 @@
 apply plugin: 'com.android.application'
 
+// Firma del APK de release. El keystore NO se versiona: viaja en base64 por
+// variable de entorno (GitHub Secrets) y se materializa dentro de build/, que
+// se borra con `clean` y está fuera de git. Ver docs/construir-android.md.
+//
+// Cuando la variable no está —compilar a mano, o un fork sin los secretos—
+// `assembleRelease` sigue funcionando pero deja el APK sin firmar, que Android
+// no instala. El workflow de release corta antes con un mensaje claro en vez
+// de publicar un archivo inservible.
+def keystoreBase64 = System.getenv("PT_KEYSTORE_BASE64")
+def keystoreFile = layout.buildDirectory.file("pensiontracker-release.jks").get().asFile
+
 android {
     namespace = "cl.pensiontracker.app"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -7,8 +18,20 @@ android {
         applicationId "cl.pensiontracker.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        // La versión la inyecta el workflow de release desde el tag de git
+        // (.github/workflows/build.yml). Android se niega a instalar una
+        // actualización cuyo versionCode no sea mayor que el instalado, así
+        // que dejarlo fijo en 1 significaba que el segundo release no se
+        // podría instalar sobre el primero.
+        //
+        // Los valores de abajo son solo para compilar a mano: un APK de
+        // depuración no se distribuye, así que da igual con qué número salga.
+        // `Integer.parseInt(...)` y no `(...).toInteger()`: Groovy ignora el
+        // espacio antes del paréntesis y lee `versionCode (x ?: "1")` como la
+        // llamada `versionCode("1")`, para después invocar `.toInteger()`
+        // sobre lo que devuelva —nada—. Falla con "Value is null".
+        versionCode Integer.parseInt(System.getenv("PT_VERSION_CODE") ?: "1")
+        versionName System.getenv("PT_VERSION_NAME") ?: "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,8 +39,23 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            if (keystoreBase64) {
+                keystoreFile.parentFile.mkdirs()
+                keystoreFile.bytes = keystoreBase64.decodeBase64()
+                storeFile keystoreFile
+                storePassword System.getenv("PT_KEYSTORE_PASSWORD")
+                keyAlias System.getenv("PT_KEY_ALIAS")
+                keyPassword System.getenv("PT_KEY_PASSWORD")
+            }
+        }
+    }
     buildTypes {
         release {
+            if (keystoreBase64) {
+                signingConfig signingConfigs.release
+            }
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

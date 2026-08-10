@@ -90,10 +90,63 @@ cat telefono.db | adb shell "run-as cl.pensiontracker.app sh -c 'cat > databases
 `run-as` solo funciona con un APK de depuración; con uno de release firmado
 hay que usar la función de respaldo de la propia aplicación.
 
-## Pendiente
+## Firmar el APK de release
 
-- **Firma de release.** Hoy solo se construye el APK de depuración, que Android
-  marca como de origen desconocido y no sirve para distribuir.
+El APK que se publica lo construye el job `android` de
+`.github/workflows/build.yml` cuando se empuja un tag `vMAYOR.MENOR.PARCHE`.
+Toma el keystore de los secretos del repositorio; el archivo **no se versiona**
+en ninguna forma.
+
+### Generar el keystore
+
+Una sola vez en la vida del proyecto:
+
+```bash
+keytool -genkeypair -v -keystore pensiontracker-release.jks \
+  -alias pensiontracker -keyalg RSA -keysize 4096 -validity 10000 \
+  -dname "CN=Pensión Tracker, O=pataguadark, C=CL"
+```
+
+`-validity 10000` son unos 27 años: si el certificado expira, no se puede
+publicar ninguna actualización más.
+
+### Cargarlo en GitHub
+
+```bash
+base64 -w0 pensiontracker-release.jks   # el contenido va en el primer secreto
+```
+
+En *Settings → Secrets and variables → Actions*, cuatro secretos:
+
+| Secreto | Contenido |
+|---|---|
+| `ANDROID_KEYSTORE_BASE64` | la salida del `base64 -w0` de arriba |
+| `ANDROID_KEYSTORE_PASSWORD` | la contraseña del almacén |
+| `ANDROID_KEY_ALIAS` | `pensiontracker` |
+| `ANDROID_KEY_PASSWORD` | la contraseña de la clave |
+
+Si falta el primero, el workflow corta antes de compilar en vez de publicar un
+APK sin firmar: Android se niega a instalar uno, y sin ese corte el fallo se
+descubriría recién en el teléfono de quien lo descargue.
+
+### El keystore es permanente
+
+**Guarda una copia fuera del repositorio y fuera de GitHub** — un gestor de
+contraseñas, un disco cifrado, lo que sea, pero que exista. Android rechaza una
+actualización firmada con otra llave: si el keystore se pierde, nadie puede
+actualizar sin desinstalar, y quien no haya exportado su respaldo pierde el
+registro completo de pagos. Es el archivo más importante del proyecto después
+del código.
+
+### Versión
+
+El `versionCode` y el `versionName` salen del tag, no del `build.gradle`:
+`v1.2.3` produce `versionName 1.2.3` y `versionCode 10203` (`mayor * 10000 +
+menor * 100 + parche`, con menor y parche topados en 99). Compilar a mano sin
+esas variables deja `1` y `"1.0"`, que sirven para depuración y no para
+distribuir.
+
+## Pendiente
 - **F-Droid.** Compila desde el código y firma con su propia llave, así que su
   APK y el de GitHub Releases no son intercambiables: quien instale desde un
   canal tendrá que desinstalar para cambiarse al otro.
