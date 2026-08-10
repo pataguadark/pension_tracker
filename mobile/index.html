@@ -2,7 +2,10 @@
 <html lang="es">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <!-- Sin `viewport-fit=cover`: activa una rama de SystemBars de Capacitor
+         que descuenta el teclado dos veces y colapsa el WebView. El porqué
+         completo está en configuracion-build.test.ts. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Pensión Tracker</title>
   </head>
   <body>
