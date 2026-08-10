@@ -6,6 +6,8 @@ CSRF activo, exportación CSV y verificación de que los endpoints
 mutadores rechazan GET.
 """
 
+import io
+import sqlite3
 from datetime import datetime
 from unittest.mock import Mock
 
@@ -472,3 +474,96 @@ def test_historial_no_muestra_decimales_de_mas_en_el_factor(client):
 
     assert ">3<" in html.replace(" ", "").replace("\n", "")
     assert "3.0" not in html
+
+
+def _respaldo_en_memoria(tmp_path):
+    """Un .db mínimo y válido, devuelto como bytes para subirlo."""
+    ruta = tmp_path / "para_subir.db"
+    conn = sqlite3.connect(ruta)
+    conn.executescript("""
+        CREATE TABLE pagos (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            fecha         TEXT    NOT NULL,
+            mes_pago      INTEGER NOT NULL,
+            anio_pago     INTEGER NOT NULL,
+            utm_valor     REAL    NOT NULL,
+            cuota_pactada REAL    NOT NULL,
+            monto_pagado  REAL    NOT NULL,
+            desbalance    REAL    NOT NULL,
+            utm_factor    REAL
+        );
+        CREATE TABLE utm_historial (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            anio           INTEGER NOT NULL,
+            mes            INTEGER NOT NULL,
+            utm_valor      REAL    NOT NULL,
+            fecha_registro TEXT    NOT NULL,
+            UNIQUE(anio, mes)
+        );
+        CREATE TABLE configuracion (clave TEXT PRIMARY KEY, valor TEXT NOT NULL);
+        INSERT INTO pagos (id, fecha, mes_pago, anio_pago, utm_valor,
+                           cuota_pactada, monto_pagado, desbalance, utm_factor)
+        VALUES (1, '2026-05-10', 5, 2026, 68000, 204000, 300000, 96000, 3.0);
+    """)
+    conn.commit()
+    conn.close()
+    return ruta.read_bytes()
+
+
+def test_importar_sin_csrf_token_falla(client, tmp_path):
+    resp = client.post("/importar", data={
+        "respaldo": (io.BytesIO(_respaldo_en_memoria(tmp_path)), "respaldo.db"),
+    }, content_type="multipart/form-data")
+    assert resp.status_code == 400
+
+
+def test_importar_reemplaza_el_historial(client, tmp_path):
+    _registrar_pago(client)
+
+    resp = client.get("/historial")
+    token = extraer_csrf_token(resp.get_data(as_text=True))
+
+    resp = client.post("/importar", data={
+        "csrf_token": token,
+        "respaldo": (io.BytesIO(_respaldo_en_memoria(tmp_path)), "respaldo.db"),
+    }, content_type="multipart/form-data", follow_redirects=True)
+
+    assert resp.status_code == 200
+    # El pago del respaldo está y el que se había registrado ya no.
+    assert b"300.000" in resp.data
+    assert b"213.588" not in resp.data
+
+
+def test_importar_un_archivo_invalido_avisa_y_no_borra_nada(client, tmp_path):
+    _registrar_pago(client)
+
+    resp = client.get("/historial")
+    token = extraer_csrf_token(resp.get_data(as_text=True))
+
+    resp = client.post("/importar", data={
+        "csrf_token": token,
+        "respaldo": (io.BytesIO(b"no soy una base"), "trucho.db"),
+    }, content_type="multipart/form-data", follow_redirects=True)
+
+    assert "No parece un respaldo".encode() in resp.data
+    assert b"213.588" in resp.data
+
+
+def test_importar_sin_archivo_avisa(client):
+    # Hace falta un pago: `.historial-actions` -y con él el csrf_token- vive
+    # dentro del `{% if %}` de "hay pagos", así que con la base vacía el
+    # historial no trae token que extraer.
+    _registrar_pago(client)
+
+    resp = client.get("/historial")
+    token = extraer_csrf_token(resp.get_data(as_text=True))
+
+    resp = client.post("/importar", data={"csrf_token": token},
+                       content_type="multipart/form-data",
+                       follow_redirects=True)
+
+    assert "Elige un archivo".encode() in resp.data
+
+
+def test_importar_rechaza_get(client):
+    assert client.get("/importar").status_code == 405

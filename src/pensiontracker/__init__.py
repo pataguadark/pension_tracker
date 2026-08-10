@@ -7,7 +7,7 @@ Expone create_app(), la application factory de Flask.
 """
 
 from dotenv import load_dotenv
-from flask import Flask, send_from_directory
+from flask import Flask, flash, redirect, send_from_directory, url_for
 from flask_wtf.csrf import CSRFProtect
 
 from pensiontracker import config, formatters
@@ -39,6 +39,11 @@ def create_app(test_config: dict | None = None) -> Flask:
     app.config.from_mapping(
         SECRET_KEY=secret_key,
         DEBUG=config.DEBUG,
+        # Un registro de pensión es una fila al mes: dos décadas de pagos
+        # no llegan a un megabyte. 25 MB deja margen de sobra y descarta de
+        # inmediato un archivo que no tiene nada que hacer acá. Sin esto,
+        # Flask acepta una subida de cualquier tamaño.
+        MAX_CONTENT_LENGTH=25 * 1024 * 1024,
     )
 
     if test_config is not None:
@@ -60,6 +65,11 @@ def create_app(test_config: dict | None = None) -> Flask:
             "default-src 'self'; img-src 'self' data:"
         )
         return response
+
+    @app.errorhandler(413)
+    def _subida_demasiado_grande(_error):
+        flash("El archivo supera el máximo de 25 MB.", "error")
+        return redirect(url_for("pagos.historial"))
 
     @app.route("/sw.js")
     def service_worker():

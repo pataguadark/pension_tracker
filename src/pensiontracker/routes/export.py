@@ -1,12 +1,14 @@
 """
 routes/export.py
 -----------------
-Blueprint: exportación y respaldo de los pagos.
+Blueprint: entrada y salida de los datos del usuario.
 
 Rutas:
   GET  /exportar          → Descarga CSV con todos los pagos
   POST /respaldar         → Descarga una copia binaria completa de la BD
                              (API .backup de sqlite3; POST + CSRF)
+  POST /importar          → Reemplaza la BD con un respaldo recibido
+                             (POST + CSRF; ver services/importador.py)
 """
 
 import csv
@@ -15,10 +17,12 @@ import os
 import sqlite3
 import tempfile
 from datetime import date
+from pathlib import Path
 
-from flask import Blueprint, flash, redirect, send_file, url_for
+from flask import Blueprint, flash, redirect, request, send_file, url_for
 
 from pensiontracker.database import db_manager
+from pensiontracker.services import importador
 
 export_bp = Blueprint("export", __name__)
 
@@ -95,3 +99,36 @@ def respaldar_datos():
     )
     respuesta.call_on_close(lambda: os.remove(tmp_path))
     return respuesta
+
+
+@export_bp.route("/importar", methods=["POST"])
+def importar_respaldo():
+    """
+    Reemplaza la base con el respaldo subido.
+
+    La ruta no valida nada por su cuenta: materializa la subida en un
+    temporal y deja que services/importador.py decida. Lo único que agrega
+    es traducir su excepción a un mensaje flash.
+    """
+    archivo = request.files.get("respaldo")
+    if archivo is None or archivo.filename == "":
+        flash("Elige un archivo de respaldo.", "warning")
+        return redirect(url_for("pagos.historial"))
+
+    fd, tmp_path = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    try:
+        archivo.save(tmp_path)
+        resumen = importador.importar(Path(tmp_path))
+    except importador.RespaldoInvalido as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("pagos.historial"))
+    finally:
+        os.remove(tmp_path)
+
+    flash(
+        f"Respaldo importado: {resumen.pagos} pagos. "
+        f"Tu base anterior quedó guardada como {resumen.copia_previa.name}.",
+        "success",
+    )
+    return redirect(url_for("pagos.historial"))

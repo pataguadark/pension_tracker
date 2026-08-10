@@ -217,6 +217,13 @@
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button type="submit" class="btn-exportar">↓ Respaldar datos</button>
         </form>
+        <form action="{{ url_for('export.importar_respaldo') }}" method="POST"
+              enctype="multipart/form-data" class="form-inline"
+              onsubmit="return confirm('Esto reemplaza TODOS tus pagos actuales por los del archivo. ¿Continuar?');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="file" name="respaldo" accept=".db" required class="form-input">
+            <button type="submit" class="btn-exportar">↑ Importar respaldo</button>
+        </form>
         <a href="{{ url_for('pagos.registro') }}" class="btn-nuevo">+ Nuevo pago</a>
     </div>
 
