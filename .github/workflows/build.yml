@@ -37,6 +37,18 @@ jobs:
       - name: Instalar dependencias del proyecto
         run: uv sync
 
+      # tests/test_interoperabilidad_db.py levanta el lado TypeScript con
+      # `npx vite-node` para comprobar que las dos plataformas leen el mismo
+      # .db. Sin Node ni node_modules, esas pruebas mueren con
+      # FileNotFoundError y el job queda rojo aunque el código esté bien: en
+      # el momento del tag (push de rama no dispara, a diferencia de
+      # tests.yml) este job es la única red antes de publicar el release.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Instalar dependencias del móvil (para las pruebas de interoperabilidad)
+        run: npm ci --prefix mobile
+
       - name: Tests
         run: uv run pytest
 
