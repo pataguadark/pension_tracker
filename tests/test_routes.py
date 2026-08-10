@@ -535,6 +535,8 @@ def test_importar_reemplaza_el_historial(client, tmp_path):
 
 
 def test_importar_archivo_demasiado_grande_avisa_y_no_borra_nada(client):
+    _registrar_pago(client)
+
     # Werkzeug corta por Content-Length antes de leer el cuerpo, así que no
     # hace falta un .db válido ni token CSRF: la ruta nunca llega a mirarlos.
     cuerpo = io.BytesIO(b"0" * (26 * 1024 * 1024))
@@ -545,6 +547,8 @@ def test_importar_archivo_demasiado_grande_avisa_y_no_borra_nada(client):
 
     assert resp.status_code == 200
     assert "El archivo supera el máximo de 25 MB.".encode("utf-8") in resp.data
+    # El pago original debe seguir visible después del rechazo.
+    assert b"213.588" in resp.data
 
 
 def test_importar_un_archivo_invalido_avisa_y_no_borra_nada(client, tmp_path):
