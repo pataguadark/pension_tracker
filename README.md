@@ -217,9 +217,13 @@ aplicación guarda una copia de tu base actual junto a ella (verás un archivo
 `pension_tracker.db.previo-...` en el directorio de datos), y conserva las
 tres más recientes. Si importas por error, ahí está lo que tenías.
 
-**El archivo sirve en las dos plataformas.** El mismo `.db` se abre en el
-computador y en el teléfono, así que respaldar en uno y restaurar en el otro
-es la forma de mudarte de equipo.
+Esos dos botones —"↓ Respaldar datos" y "↑ Importar respaldo"— existen hoy
+**solo en el escritorio**. La app Android todavía no tiene ninguno de los
+dos: por ahora no puedes sacar tu registro del teléfono ni meterle un
+respaldo. El formato del archivo `.db` ya es el mismo en ambas plataformas
+—no hay nada que cambiar ahí—, así que en cuanto el móvil sepa respaldar,
+mudarte entre computador y teléfono va a ser tan simple como respaldar en
+uno e importar en el otro. Hasta entonces, esa ruta no existe.
 
 Un archivo que no sea un respaldo válido se rechaza sin alterar nada, y te
 dice por qué: no es una base de datos, está dañada, o es de otra aplicación.
@@ -239,13 +243,17 @@ Vale la pena decirlas de frente:
   el computador, tenlo presente.
 - **Los binarios no están firmados** — de ahí los avisos de SmartScreen y Gatekeeper.
 - **macOS solo Apple Silicon** por ahora.
-- **No hay apps nativas de Android ni iOS** todavía, solo la PWA vía `--lan`.
+- **La app Android nativa se compila pero no se publica.** El proyecto
+  nativo existe y funciona (ver [`docs/construir-android.md`](docs/construir-android.md)),
+  pero el APK no sale en los releases hasta que el móvil sepa respaldar tus
+  datos: hoy, por ahí, no hay forma de sacarlos del teléfono. Mientras tanto
+  usa la PWA vía `--lan`. No hay app nativa de iOS.
 - **La app no valida tu acuerdo**: el factor UTM lo ingresas tú y la app confía en él.
 
 ## Roadmap
 
 - [ ] Cifrado de la base de datos (SQLCipher)
-- [ ] App Android nativa (Capacitor)
+- [x] App Android nativa (Capacitor) — construida, sin publicar: espera al respaldo en el móvil
 - [ ] App iOS nativa (Capacitor)
 - [ ] Instalador propiamente tal en Windows, y build para Mac Intel
 - [ ] Reporte imprimible / PDF del historial
