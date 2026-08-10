@@ -534,6 +534,19 @@ def test_importar_reemplaza_el_historial(client, tmp_path):
     assert b"213.588" not in resp.data
 
 
+def test_importar_archivo_demasiado_grande_avisa_y_no_borra_nada(client):
+    # Werkzeug corta por Content-Length antes de leer el cuerpo, así que no
+    # hace falta un .db válido ni token CSRF: la ruta nunca llega a mirarlos.
+    cuerpo = io.BytesIO(b"0" * (26 * 1024 * 1024))
+
+    resp = client.post("/importar", data={
+        "respaldo": (cuerpo, "respaldo.db"),
+    }, content_type="multipart/form-data", follow_redirects=True)
+
+    assert resp.status_code == 200
+    assert "El archivo supera el máximo de 25 MB.".encode("utf-8") in resp.data
+
+
 def test_importar_un_archivo_invalido_avisa_y_no_borra_nada(client, tmp_path):
     _registrar_pago(client)
 
