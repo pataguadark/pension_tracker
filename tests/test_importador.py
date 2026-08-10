@@ -180,6 +180,28 @@ def base_viva(tmp_path, monkeypatch):
     return ruta
 
 
+def test_columnas_esperadas_coincide_con_el_esquema_real_de_db_manager(base_viva):
+    """
+    COLUMNAS_ESPERADAS es una copia a mano del esquema que db_manager.py
+    crea con CREATE TABLE. Si alguien agrega una columna allá y olvida
+    replicarla acá, el importador empieza a rechazar respaldos legítimos y
+    ninguna prueba lo nota. Esta prueba cierra ese candado: compara el
+    PRAGMA table_info real de una base creada por
+    db_manager.inicializar_db() -la fixture base_viva ya la deja armada-
+    contra COLUMNAS_ESPERADAS, tabla por tabla.
+    """
+    conn = sqlite3.connect(base_viva)
+    try:
+        for tabla, columnas_esperadas in importador.COLUMNAS_ESPERADAS.items():
+            columnas_reales = [
+                (fila[1], fila[2].upper(), fila[3])
+                for fila in conn.execute(f"PRAGMA table_info({tabla})")
+            ]
+            assert columnas_reales == columnas_esperadas, tabla
+    finally:
+        conn.close()
+
+
 def test_la_copia_previa_es_una_base_legible_con_los_mismos_pagos(base_viva):
     copia = importador.respaldar_base_actual()
 
