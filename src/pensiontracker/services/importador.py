@@ -125,10 +125,11 @@ def validar(ruta: Path) -> InformeValidacion:
         # Tablas de más también son esquema ajeno: sin este chequeo, un
         # archivo con las tres tablas correctas más contenido de otra
         # aplicación pasaría la validación. Se excluye el prefijo
-        # `sqlite_` porque sqlite crea `sqlite_sequence` por su cuenta en
-        # cuanto se inserta la primera fila en una tabla AUTOINCREMENT
-        # (pagos y utm_historial la tienen): toda base real de esta
-        # aplicación la trae, y no es contenido ajeno sino del motor.
+        # `sqlite_` porque sqlite crea `sqlite_sequence` por su cuenta al
+        # ejecutar el CREATE TABLE de una tabla con AUTOINCREMENT (pagos y
+        # utm_historial la tienen), no al insertar la primera fila: toda
+        # base real de esta aplicación la trae, y no es contenido ajeno
+        # sino del motor.
         filas = conn.execute(
             "SELECT name FROM sqlite_master WHERE type = 'table'"
         ).fetchall()
@@ -141,7 +142,7 @@ def validar(ruta: Path) -> InformeValidacion:
     return InformeValidacion(tiene_utm_factor=not legacy)
 
 
-COPIAS_A_CONSERVAR = 3
+COPIAS_A_CONSERVAR: int = 3
 SUFIJO_COPIA = "previo-"
 
 
