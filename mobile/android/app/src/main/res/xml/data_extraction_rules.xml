@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Vacíos a propósito: ni Auto Backup a la nube ni transferencia entre
+  dispositivos deben llevarse el registro de pagos. Ver el comentario en
+  AndroidManifest.xml sobre allowBackup para el porqué completo.
+-->
+<data-extraction-rules>
+    <cloud-backup />
+    <device-transfer />
+</data-extraction-rules>

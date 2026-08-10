@@ -1,8 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!--
+      allowBackup apagado a propósito. El contenido de este directorio es el
+      registro de pagos de pensión alimenticia: con allowBackup="true"
+      Android Auto Backup lo sube completo (databases/ incluido) a la
+      copia de Google Drive del usuario y a la transferencia entre
+      dispositivos. Que la base salga del equipo sin que el usuario lo
+      pida, y hacia una nube que no es la suya, contradice la promesa
+      central del proyecto: "nadie más tiene una copia, ni este
+      proyecto, ni un servidor, ni la nube". dataExtractionRules deja
+      ambos mecanismos vacíos explícitamente (ver xml/data_extraction_rules.xml).
+    -->
     <application
-        android:allowBackup="true"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
